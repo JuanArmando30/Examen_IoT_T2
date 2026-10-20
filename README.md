@@ -1,9 +1,64 @@
-
 # API Vehículo IoT
 
 API hecha con **Python y FastAPI** para controlar y monitorear un vehículo IoT (por ejemplo, una excavadora controlada por un ESP8266/ESP32). Guarda sus datos en una base MySQL alojada en **Amazon RDS** y usa únicamente **procedimientos almacenados** (21 en total) para leer y escribir.
 
-Este proyecto corresponde a la **Práctica 2.5 – APIs para IoT en entorno Dev**. Todo se ejecuta en la computadora local (`http://localhost:8000`); lo único remoto es la base de datos en RDS. El despliegue público (EC2, dominio, HTTPS/WSS) se hará en la práctica 2.6.
+Este proyecto nació en la **Práctica 2.5** (entorno local, `http://localhost:8000`) y se publicó en AWS en el **Examen 2.6**: la API corre en Amazon EC2, con HTTPS/WSS, y usa la base de datos en Amazon RDS.
+
+---
+
+## Despliegue público en AWS (Examen 2.6)
+
+| Qué | Dirección |
+|---|---|
+| API | https://vehiculos-juan.duckdns.org |
+| Swagger UI (documentación) | https://vehiculos-juan.duckdns.org/docs |
+| Salud de la API y de RDS | https://vehiculos-juan.duckdns.org/health/db |
+| WebSocket seguro (WSS) | `wss://vehiculos-juan.duckdns.org/ws/vehiculos/{id_vehiculo}` |
+
+### Cómo está publicada
+
+```
+Cliente ──HTTPS/WSS (443)──► Caddy ──► Uvicorn (127.0.0.1:8000) ──► Amazon RDS (3306)
+                          └─────── Amazon EC2 (Windows Server) ───────┘
+```
+
+- **Amazon EC2 (Windows Server)** con IP elástica. Su grupo de seguridad solo abre 80 y 443 al público; el escritorio remoto (3389) está limitado a mi IP y el puerto 8000 **no** se expone.
+- **DuckDNS** da el dominio gratuito que apunta a la IP elástica.
+- **Caddy** recibe HTTPS/WSS, obtiene y renueva solo el certificado de Let's Encrypt, redirige HTTP a HTTPS y pasa el tráfico a Uvicorn.
+- **Uvicorn** escucha únicamente en `127.0.0.1:8000`.
+- **Amazon RDS** solo acepta el puerto 3306 desde el grupo de seguridad de la instancia EC2.
+- Dos **tareas programadas de Windows** (`VehiculoAPI` y `VehiculoCaddy`) arrancan con el servidor y se reinician solas si fallan, así que la API sigue funcionando aunque se cierre cualquier sesión.
+
+Los archivos de despliegue están en la carpeta `deploy/` (`deploy/windows/registrar_tareas.ps1` y `deploy/Caddyfile.example`). El `.env` solo existe en el servidor y nunca se sube a GitHub.
+
+### Instalar en el servidor (resumen)
+
+```powershell
+git clone https://github.com/JuanArmando30/vehiculo_oit.git C:\vehiculo_oit
+cd C:\vehiculo_oit
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+# crear C:\vehiculo_oit\.env con los datos de RDS y claves nuevas
+.\.venv\Scripts\python.exe -m app.db.verificar_procedimientos
+powershell -ExecutionPolicy Bypass -File .\deploy\windows\registrar_tareas.ps1
+```
+
+### Actualizar el servidor después de un cambio
+
+```powershell
+cd C:\vehiculo_oit
+Stop-ScheduledTask VehiculoAPI
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+git pull
+Start-ScheduledTask VehiculoAPI
+```
+
+### Probar por HTTPS/WSS
+
+| Antes (local) | Ahora (público) |
+|---|---|
+| `http://localhost:8000/...` | `https://vehiculos-juan.duckdns.org/...` |
+| `ws://localhost:8000/ws/vehiculos/1` | `wss://vehiculos-juan.duckdns.org/ws/vehiculos/1` |
 
 ---
 
@@ -253,9 +308,11 @@ Con esto quedan integrados los **21 procedimientos almacenados**.
 
 Swagger UI no describe WebSocket, así que se documenta aquí.
 
-**URL:** `ws://localhost:8000/ws/vehiculos/{id_vehiculo}`
+**URL pública (WSS):** `wss://vehiculos-juan.duckdns.org/ws/vehiculos/{id_vehiculo}`
 
-Por ejemplo: `ws://localhost:8000/ws/vehiculos/1`
+**URL local:** `ws://localhost:8000/ws/vehiculos/{id_vehiculo}`
+
+Por ejemplo: `wss://vehiculos-juan.duckdns.org/ws/vehiculos/1`
 
 Cómo se comporta:
 - Al conectarte recibes enseguida el **último estado** del vehículo (`estado_inicial`).
@@ -390,14 +447,12 @@ GRANT EXECUTE ON vehiculo_iot.* TO 'api_vehiculos'@'%';
 
 ---
 
-## Qué cambiará en la práctica 2.6
+## Qué cambió al publicarla en AWS
 
-La lógica de la API se mantiene. Lo que cambiará al publicarla es el entorno: el servidor correrá en un equipo público (por ejemplo, EC2) con dominio, HTTPS y WSS; el Security Group de RDS permitirá el acceso desde ese servidor en lugar de tu IP; se ajustará CORS y se reforzará la autenticación del WebSocket.
+La lógica de la API se mantuvo; cambió el entorno: ahora corre en EC2 con dominio, HTTPS y WSS, el Security Group de RDS solo permite el acceso desde la instancia, y las claves viajan cifradas. Como mejora futura queda la autenticación del WebSocket y la confirmación del ESP8266/ESP32.
 
 ---
 
 ## Autor
 
-Proyecto desarrollado por **[Juan Armando Castillo Rodríguez]** para la materia *Implementación de Soluciones IoT*.
-#   E x a m e n _ I o T _ T 2  
- 
+Proyecto individual desarrollado por **[Nombre del alumno]** para la materia *Implementación de Soluciones IoT*.
