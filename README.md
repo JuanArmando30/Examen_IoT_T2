@@ -455,4 +455,4 @@ La lógica de la API se mantuvo; cambió el entorno: ahora corre en EC2 con domi
 
 ## Autor
 
-Proyecto individual desarrollado por **[Nombre del alumno]** para la materia *Implementación de Soluciones IoT*.
+Proyecto individual desarrollado por **Juan Armando Castillo Rodríguez** para la materia *Implementación de Soluciones IoT*.
