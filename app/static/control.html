@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#040a1c">
 <title>Control · Excavadora IoT</title>
@@ -16,7 +16,7 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
-html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);
+html,body{margin:0;min-height:100%;max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg);color:var(--txt);
   font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 body{
   background:
@@ -33,14 +33,15 @@ body{
   padding:calc(var(--sat) + 10px) calc(var(--sar) + 14px) calc(var(--sab) + 108px) calc(var(--sal) + 14px);
 }
 h1,h2,h3,p{margin:0}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:1100px;margin:0 auto 12px}
-.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;max-width:1100px;margin:0 auto 12px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0;flex:1 1 220px}
+.brand>div:last-child{min-width:0}
 .logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;
   background:linear-gradient(135deg,#1c3a9e,#4a2fb3);box-shadow:0 0 22px #46d3ff33 inset,0 4px 18px #0008}
 .logo svg{width:26px;height:26px}
-h1{font-size:1.15rem;letter-spacing:.2px}
+h1{font-size:1.15rem;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #vehiculoNombre{color:var(--muted);font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.top-right{display:flex;align-items:center;gap:8px;flex:none}
+.top-right{display:flex;align-items:center;gap:8px;flex:0 1 auto;min-width:0}
 .chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;font-size:.8rem;
   background:#0b1636;border:1px solid var(--line);white-space:nowrap}
 .chip i{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px var(--danger)}
@@ -54,15 +55,17 @@ h1{font-size:1.15rem;letter-spacing:.2px}
   background:#2a1d05;border:1px solid #6b4d10;color:#ffe2a0}
 .banner.info{background:#0b2145;border-color:#25508f;color:#bfe0ff}
 .banner.err{background:#35101c;border-color:#7a2238;color:#ffc2cf}
-.layout{display:grid;gap:14px;max-width:1100px;margin:0 auto}
-@media(min-width:900px){.layout{grid-template-columns:1.1fr .9fr;align-items:start}}
+.layout{display:grid;gap:14px;max-width:1100px;margin:0 auto;grid-template-columns:minmax(0,1fr)}
+.layout>*{min-width:0}
+.layout>section{grid-template-columns:minmax(0,1fr)}
+@media(min-width:900px){.layout{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);align-items:start}}
 .card{background:linear-gradient(180deg,#0f1e4ccc,#0b1639cc);border:1px solid var(--line);border-radius:var(--r);
   padding:16px;backdrop-filter:blur(6px);box-shadow:0 10px 30px #0006}
-.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.card-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
 h2{font-size:1rem;color:var(--cyan);letter-spacing:.6px;text-transform:uppercase}
 h3{font-size:.78rem;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin:18px 0 10px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0a1434}
-.seg button{border:0;background:transparent;color:var(--muted);padding:8px 14px;font:inherit;font-size:.85rem;cursor:pointer}
+.seg{display:inline-flex;max-width:100%;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0a1434}
+.seg button{flex:1 1 auto;border:0;background:transparent;color:var(--muted);padding:9px 12px;font:inherit;font-size:.85rem;cursor:pointer;touch-action:manipulation}
 .seg button.on{background:linear-gradient(180deg,#27449f,#1b3278);color:#fff}
 .ayuda{font-size:.78rem;color:var(--muted);margin-top:8px}
 
@@ -81,7 +84,7 @@ h3{font-size:.78rem;color:var(--muted);letter-spacing:.8px;text-transform:upperc
 .btn:disabled{opacity:.38;cursor:not-allowed;filter:saturate(.5)}
 .btn:focus-visible,.icon-btn:focus-visible,.stop:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:10px;
-  width:100%;max-width:330px;aspect-ratio:1;margin:4px auto 0}
+  width:100%;max-width:min(330px,60vh);aspect-ratio:1;margin:4px auto 0}
 .pad .btn{min-height:0;font-size:.68rem}
 .pad .up{grid-column:2;grid-row:1}.pad .left{grid-column:1;grid-row:2}
 .pad .right{grid-column:3;grid-row:2}.pad .down{grid-column:2;grid-row:3}
@@ -100,7 +103,7 @@ h3{font-size:.78rem;color:var(--muted);letter-spacing:.8px;text-transform:upperc
 .kv dt{color:var(--muted)}.kv dd{margin:0;text-align:right;font-weight:600;word-break:break-word}
 .big{font-size:1.5rem;color:var(--cyan);letter-spacing:.5px}
 .warn-txt{color:var(--warn)}.ok-txt{color:var(--ok)}
-select,input[type=password],input[type=text]{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);
+select,input[type=password],input[type=text]{width:100%;max-width:100%;min-width:0;text-overflow:ellipsis;padding:12px;border-radius:12px;border:1px solid var(--line);
   background:#0a1434;color:var(--txt);font:inherit}
 .row{display:flex;gap:10px;margin-top:12px}.row>*{flex:1}
 .pbtn{padding:13px;border-radius:14px;border:1px solid #2f4799;background:linear-gradient(180deg,#1f3a95,#13265f);
@@ -113,6 +116,7 @@ select,input[type=password],input[type=text]{width:100%;padding:12px;border-radi
 .bar.thin{height:6px;margin-top:6px}.bar.thin>div{background:linear-gradient(90deg,#2de3a8,#46d3ff)}
 .lista{list-style:none;margin:0;padding:0;font-size:.85rem;max-height:240px;overflow:auto}
 .lista li{display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid #1a2a5e}
+.lista li span:first-child{min-width:0;overflow-wrap:anywhere}
 .lista li span:last-child{color:var(--muted);white-space:nowrap}
 .vacio{color:var(--muted);font-size:.85rem}
 .link{background:none;border:0;color:var(--cyan);font:inherit;font-size:.82rem;cursor:pointer;padding:4px}
@@ -121,7 +125,7 @@ select,input[type=password],input[type=text]{width:100%;padding:12px;border-radi
 
 
 /* ---- joystick ---- */
-.joy{position:relative;width:min(76vw,300px);aspect-ratio:1;margin:6px auto 0;border-radius:50%;
+.joy{position:relative;width:min(76vw,300px,52vh);aspect-ratio:1;margin:6px auto 0;border-radius:50%;
   background:radial-gradient(circle at 50% 38%,#17306f 0%,#0c1840 62%,#08112b 100%);
   border:2px solid #2f4799;box-shadow:inset 0 0 42px #000b,0 0 30px #1d3a9a55,0 10px 26px #0008;
   touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
@@ -160,7 +164,7 @@ select,input[type=password],input[type=text]{width:100%;padding:12px;border-radi
 /* ---- barra de parada ---- */
 .stopbar{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px calc(var(--sar) + 14px) calc(var(--sab) + 10px) calc(var(--sal) + 14px);
   background:linear-gradient(180deg,#040a1c00,#040a1cf2 38%)}
-.stop{display:block;width:100%;max-width:1100px;margin:0 auto;min-height:68px;border-radius:18px;border:2px solid #ff7b93;
+.stop{display:block;width:100%;max-width:1100px;margin:0 auto;min-height:60px;border-radius:18px;border:2px solid #ff7b93;
   color:#fff;font:inherit;font-size:1.25rem;font-weight:800;letter-spacing:2px;cursor:pointer;touch-action:manipulation;
   background:linear-gradient(180deg,#e0334f,#a81c37);box-shadow:0 8px 26px #ff4d6d55}
 .stop:active{transform:scale(.985);box-shadow:0 0 34px #ff4d6dcc}
@@ -178,6 +182,24 @@ dialog label{display:block;font-size:.85rem;color:var(--muted);margin:14px 0 6px
 .toast{padding:11px 14px;border-radius:12px;font-size:.9rem;background:#0c1a45f2;border:1px solid var(--line);
   box-shadow:0 8px 24px #000a}
 .toast.err{border-color:#a8344f;background:#35101cf2}.toast.ok{border-color:#1f9c76}
+
+/* ---- pantallas pequeñas y horizontal ---- */
+@media(max-width:480px){
+  body{padding-left:calc(var(--sal) + 10px);padding-right:calc(var(--sar) + 10px)}
+  .brand{flex-basis:100%}
+  .top-right{width:100%;justify-content:space-between}
+  .card{padding:13px}
+  .seg{width:100%}
+  h2{font-size:.95rem}
+  .btn{font-size:.7rem;min-height:60px}
+}
+@media(orientation:landscape) and (max-height:520px){
+  .layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}
+  .joy{width:min(44vh,230px)}.pad{max-width:min(46vh,250px)}
+  .stop{min-height:46px;font-size:1rem}
+  body{padding-bottom:calc(var(--sab) + 76px)}
+}
+.vdiag{font-size:.78rem;color:var(--muted);text-align:center;min-height:1.2em;overflow-wrap:anywhere}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -193,6 +215,8 @@ dialog label{display:block;font-size:.85rem;color:var(--muted);margin:14px 0 6px
   <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.3a8 8 0 1011.4 0"/></symbol>
   <symbol id="i-set" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
   <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM5 11a7 7 0 0014 0M12 18v3M9 21h6"/></symbol>
+  <symbol id="i-rotl" viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.7L3 8M3 3v5h5"/></symbol>
+  <symbol id="i-rotr" viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.9 1 6.7 2.7L21 8M21 3v5h-5"/></symbol>
   <symbol id="i-car" viewBox="0 0 24 24"><path d="M3 15h13l2-5h3v5M5 15v3h3M13 18h3M7 10h5l2 5M3 15V9"/><circle cx="7" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></symbol>
 </svg>
 
@@ -249,6 +273,7 @@ dialog label{display:block;font-size:.85rem;color:var(--muted);margin:14px 0 6px
           <p id="vozTexto">Di una orden, por ejemplo: “avanza”.</p>
           <p class="vres" id="vozResultado"></p>
         </div>
+        <p class="vdiag" id="vozEstado"></p>
         <label class="chk" style="display:flex;align-items:center;gap:8px;font-size:.9rem">
           <input id="chkManosLibres" type="checkbox" style="width:20px;height:20px"> Manos libres (escucha continua)
         </label>
@@ -260,22 +285,23 @@ dialog label{display:block;font-size:.85rem;color:var(--muted);margin:14px 0 6px
           <button type="button">avanza</button><button type="button">atrás</button>
           <button type="button">izquierda</button><button type="button">derecha</button>
           <button type="button">sube el brazo</button><button type="button">baja el brazo</button>
-          <button type="button">abre la pala</button><button type="button">cierra la pala</button>
+          <button type="button">pala a la izquierda</button><button type="button">pala a la derecha</button>
           <button type="button">luz</button><button type="button">sonido</button>
           <button type="button">inicia la demo</button><button type="button">alto</button>
         </div>
+        <p class="ayuda">Si la voz no funciona en tu teléfono: toca el campo de texto y usa el micrófono de tu teclado para dictar la orden, luego pulsa Enviar.</p>
         <p class="ayuda" id="ayudaVoz">Cada orden se ejecuta como un pulso. Di “alto” para detener al instante.</p>
       </div>
     </div>
 
     <p class="ayuda" id="ayudaModo">Pulso: cada toque mueve el carrito unos segundos y se detiene solo.</p>
 
-    <h3>Brazo y garra</h3>
+    <h3>Brazo y pala</h3>
     <div class="grid2">
       <button class="btn" data-codigo="5"><svg><use href="#i-chev"/></svg>Subir brazo</button>
       <button class="btn r180" data-codigo="6"><svg><use href="#i-chev"/></svg>Bajar brazo</button>
-      <button class="btn" data-codigo="7"><svg><use href="#i-open"/></svg>Abrir pala</button>
-      <button class="btn" data-codigo="8"><svg><use href="#i-close"/></svg>Cerrar pala</button>
+      <button class="btn" data-codigo="7" aria-label="Girar pala a la izquierda"><svg><use href="#i-rotl"/></svg>Girar pala izq.</button>
+      <button class="btn" data-codigo="8" aria-label="Girar pala a la derecha"><svg><use href="#i-rotr"/></svg>Girar pala der.</button>
     </div>
 
     <h3>Accesorios</h3>
@@ -284,7 +310,7 @@ dialog label{display:block;font-size:.85rem;color:var(--muted);margin:14px 0 6px
       <button class="btn" data-codigo="11"><svg><use href="#i-sound"/></svg>Sonido</button>
       <button class="btn" data-codigo="12"><svg><use href="#i-power"/></svg>Encender</button>
     </div>
-    <p class="ayuda" id="ayudaTeclas" hidden>Teclado: flechas o WASD · R/F brazo · Z/X pala · Espacio = detener</p>
+    <p class="ayuda" id="ayudaTeclas" hidden>Teclado: flechas o WASD · R/F brazo · Z/X girar pala · Espacio = detener</p>
   </section>
 
   <section style="display:grid;gap:14px">
@@ -828,7 +854,7 @@ joy.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* =====================  VOZ  ===================== */
 const ETIQUETAS = { 1: "AVANZAR", 2: "RETROCEDER", 3: "GIRAR A LA IZQUIERDA", 4: "GIRAR A LA DERECHA",
-  5: "SUBIR BRAZO", 6: "BAJAR BRAZO", 7: "ABRIR PALA", 8: "CERRAR PALA", 10: "LUZ", 11: "SONIDO", 12: "ENCENDER / APAGAR" };
+  5: "SUBIR BRAZO", 6: "BAJAR BRAZO", 7: "GIRAR PALA IZQUIERDA", 8: "GIRAR PALA DERECHA", 10: "LUZ", 11: "SONIDO", 12: "ENCENDER / APAGAR" };
 const RX = {
   stop: /\b(alto|stop|deten|detente|detener|detenlo|parar|pare|frena|frenar|freno|basta|emergencia)\b/,
   cancelar: /\b(cancela|cancelar|cancelalo|aborta|abortar)\b/,
@@ -844,8 +870,6 @@ const MOVIMIENTOS_VOZ = [
   [4, /\b(derecha)\b/],
   [5, /\b(sube|subir|levanta|levantar|alza|alzar|arriba|eleva|elevar)\b/],
   [6, /\b(baja|bajar|abajo|desciende|descender)\b/],
-  [7, /\b(abre|abrir|abierta)\b/],
-  [8, /\b(cierra|cerrar|cerrada)\b/],
 ];
 function normalizar(t) {
   return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -861,6 +885,11 @@ function interpretarOrden(texto) {
   if (RX.luz.test(t)) return { tipo: "mov", codigo: 10 };
   if (RX.sonido.test(t)) return { tipo: "mov", codigo: 11 };
   if (RX.encendido.test(t)) return { tipo: "mov", codigo: 12 };
+  if (/\b(pala|garra)\b/.test(t)) {                           // girar la pala (7 = izquierda, 8 = derecha)
+    const iz = /\b(izquierda|izquierdo)\b/.exec(t), de = /\b(derecha)\b/.exec(t);
+    if (iz && (!de || iz.index < de.index)) return { tipo: "mov", codigo: 7 };
+    if (de) return { tipo: "mov", codigo: 8 };
+  }
   let mejor = null, pos = Infinity;
   for (const [codigo, rx] of MOVIMIENTOS_VOZ) {                // gana la primera palabra que se dijo
     const m = rx.exec(t);
@@ -868,6 +897,7 @@ function interpretarOrden(texto) {
   }
   return mejor ? { tipo: "mov", codigo: mejor } : null;
 }
+function vozEstado(t) { $("vozEstado").textContent = t; }
 function vozResultado(texto, clase) {
   const el = $("vozResultado"); el.textContent = texto; el.className = "vres " + (clase || "");
 }
@@ -918,8 +948,16 @@ function crearReconocedor() {
   if (!SR) return null;
   const rec = new SR();
   rec.lang = "es-MX"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 3;
-  rec.onstart = () => { S.voz.escuchando = true; actualizarVozUI(); };
+  rec.onstart = () => {
+    S.voz.escuchando = true; S.voz.sesion = { resultados: 0, error: null, sonido: false };
+    vozEstado("Micrófono activado. Habla ahora…"); actualizarVozUI();
+  };
+  rec.onaudiostart = () => vozEstado("Micrófono abierto. Habla ahora…");
+  rec.onsoundstart = () => { S.voz.sesion.sonido = true; vozEstado("Se detecta sonido…"); };
+  rec.onspeechstart = () => vozEstado("Se detecta voz…");
+  rec.onnomatch = () => vozEstado("No se reconoció lo que dijiste. Intenta de nuevo.");
   rec.onresult = (e) => {
+    S.voz.sesion.resultados++; vozEstado("Texto recibido.");
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const res = e.results[i], txt = res[0].transcript;
       $("vozTexto").textContent = txt; $("vozTexto").className = res.isFinal ? "" : "interim";
@@ -932,12 +970,27 @@ function crearReconocedor() {
     }
   };
   rec.onerror = (e) => {
-    const msg = { "not-allowed": "Permiso de micrófono denegado.", "service-not-allowed": "Permiso de micrófono denegado.",
-      "audio-capture": "No se detecta un micrófono.", "network": "El reconocimiento de voz necesita internet." }[e.error];
-    if (msg) { toast(msg, "err"); S.voz.activa = false; }
+    const m = {
+      "not-allowed": "Permiso de micrófono denegado. Toca el candado de la barra de direcciones → Permisos → Micrófono → Permitir.",
+      "service-not-allowed": "Este navegador no permite el servicio de reconocimiento de voz (suele pasar en teléfonos sin servicios de Google). Prueba con Chrome o dicta en el campo de texto.",
+      "audio-capture": "No se detecta un micrófono.",
+      "network": "El reconocimiento de voz necesita internet y acceso al servicio de voz del navegador.",
+      "no-speech": "No se oyó nada. Acércate al micrófono e inténtalo de nuevo.",
+      "language-not-supported": "El idioma español no está disponible para voz en este navegador.",
+    }[e.error];
+    if (S.voz.sesion) S.voz.sesion.error = e.error;
+    if (e.error === "aborted") return;
+    vozEstado(m || "Error de voz: " + e.error);
+    if (e.error !== "no-speech") { toast(m || "Error de voz: " + e.error, "err"); S.voz.activa = false; }
   };
   rec.onend = () => {
     S.voz.escuchando = false;
+    const ses = S.voz.sesion;
+    if (ses && !ses.error && ses.resultados === 0) {
+      vozEstado(ses.sonido
+        ? "Se oyó sonido pero el navegador no devolvió texto. Prueba en Chrome o dicta en el campo de texto."
+        : "La escucha terminó sin oír nada. Revisa el permiso del micrófono; si funciona en otras apps, este navegador quizá no tiene reconocimiento de voz (prueba Chrome).");
+    }
     if (S.voz.activa && S.voz.manosLibres && S.modo === "voz" && !document.hidden) {
       setTimeout(() => { if (S.voz.activa) { try { rec.start(); } catch (_) {} } }, 300);   // sigue escuchando
     } else { S.voz.activa = false; }
@@ -948,8 +1001,8 @@ function crearReconocedor() {
 function iniciarVoz() {
   if (!S.clave) { abrirAjustes(); return; }
   if (!S.voz.rec) S.voz.rec = crearReconocedor();
-  if (!S.voz.rec) { toast("Tu navegador no admite reconocimiento de voz.", "err"); return; }
-  S.voz.activa = true; actualizarVozUI();
+  if (!S.voz.rec) { const m = "Este navegador no admite reconocimiento de voz. Usa Chrome o dicta en el campo de texto."; vozEstado(m); toast(m, "err"); return; }
+  S.voz.activa = true; actualizarVozUI(); vozEstado("Solicitando micrófono…");
   try { S.voz.rec.start(); } catch (_) { /* ya estaba iniciado */ }
 }
 function detenerVoz() {
@@ -972,7 +1025,8 @@ document.querySelectorAll("#chipsVoz button").forEach((b) => b.addEventListener(
   $("vozTexto").textContent = b.textContent; $("vozTexto").className = "";
   ejecutarOrdenVoz(b.textContent);
 }));
-if (!vozSoportada()) $("ayudaVoz").textContent = "Este navegador no admite reconocimiento de voz (usa Chrome o Safari). Puedes escribir la orden abajo.";
+if (window.isSecureContext === false) vozEstado("La voz solo funciona en páginas HTTPS.");
+else if (!vozSoportada()) { $("ayudaVoz").textContent = "Este navegador no admite reconocimiento de voz (usa Chrome o Safari). Puedes escribir o dictar la orden abajo."; vozEstado("Reconocimiento de voz no disponible en este navegador."); }
 
 /* =====================  ARRANQUE  ===================== */
 async function arrancar() {
