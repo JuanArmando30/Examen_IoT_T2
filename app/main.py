@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.documentacion import ETIQUETAS
 from app.api.routes import (
-    comandos, demos, estado, historial, movimientos, sistema, vehiculos, ws,
+    comandos, control, demos, estado, historial, movimientos, sistema, vehiculos, ws,
 )
 from app.contenedor import Contenedor
 from app.core.exceptions import ErrorAplicacion
@@ -85,5 +85,5 @@ async def manejar_error_inesperado(request: Request, error: Exception):
 
 
 for modulo in (sistema, vehiculos, comandos, estado, historial,
-               movimientos, demos, ws):
+               movimientos, demos, control, ws):
     app.include_router(modulo.router)

@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#040a1c">
+<title>Control · Excavadora IoT</title>
+<style>
+:root{
+  --bg:#040a1c; --bg2:#0a1637; --panel:#0d1a40; --panel2:#101f4d; --line:#243670;
+  --txt:#e8eeff; --muted:#92a3d4; --cyan:#46d3ff; --violet:#7c8cff;
+  --ok:#2de3a8; --warn:#ffc857; --danger:#ff4d6d; --r:18px;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);
+  font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+body{
+  background:
+    radial-gradient(1.2px 1.2px at 12% 18%,#fff9 50%,transparent 51%),
+    radial-gradient(1px 1px at 78% 12%,#bcd4ff99 50%,transparent 51%),
+    radial-gradient(1.4px 1.4px at 44% 36%,#fff8 50%,transparent 51%),
+    radial-gradient(1px 1px at 90% 54%,#bcd4ff88 50%,transparent 51%),
+    radial-gradient(1.2px 1.2px at 28% 72%,#fff7 50%,transparent 51%),
+    radial-gradient(1px 1px at 64% 86%,#bcd4ff88 50%,transparent 51%),
+    radial-gradient(900px 500px at 85% -10%,#1b3a9a55,transparent 60%),
+    radial-gradient(700px 500px at -10% 110%,#3a1f8a40,transparent 60%),
+    linear-gradient(180deg,var(--bg),var(--bg2) 120%);
+  background-attachment:fixed;
+  padding:calc(var(--sat) + 10px) calc(var(--sar) + 14px) calc(var(--sab) + 108px) calc(var(--sal) + 14px);
+}
+h1,h2,h3,p{margin:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:1100px;margin:0 auto 12px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;
+  background:linear-gradient(135deg,#1c3a9e,#4a2fb3);box-shadow:0 0 22px #46d3ff33 inset,0 4px 18px #0008}
+.logo svg{width:26px;height:26px}
+h1{font-size:1.15rem;letter-spacing:.2px}
+#vehiculoNombre{color:var(--muted);font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-right{display:flex;align-items:center;gap:8px;flex:none}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;font-size:.8rem;
+  background:#0b1636;border:1px solid var(--line);white-space:nowrap}
+.chip i{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px var(--danger)}
+.chip.on i{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.chip.mid i{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulso 1s infinite}
+@keyframes pulso{50%{opacity:.35}}
+.icon-btn{width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:#0b1636;color:var(--txt);
+  display:grid;place-items:center;cursor:pointer}
+.icon-btn svg{width:22px;height:22px}
+.banner{max-width:1100px;margin:0 auto 12px;padding:10px 14px;border-radius:12px;font-size:.9rem;
+  background:#2a1d05;border:1px solid #6b4d10;color:#ffe2a0}
+.banner.info{background:#0b2145;border-color:#25508f;color:#bfe0ff}
+.banner.err{background:#35101c;border-color:#7a2238;color:#ffc2cf}
+.layout{display:grid;gap:14px;max-width:1100px;margin:0 auto}
+@media(min-width:900px){.layout{grid-template-columns:1.1fr .9fr;align-items:start}}
+.card{background:linear-gradient(180deg,#0f1e4ccc,#0b1639cc);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px;backdrop-filter:blur(6px);box-shadow:0 10px 30px #0006}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+h2{font-size:1rem;color:var(--cyan);letter-spacing:.6px;text-transform:uppercase}
+h3{font-size:.78rem;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin:18px 0 10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0a1434}
+.seg button{border:0;background:transparent;color:var(--muted);padding:8px 14px;font:inherit;font-size:.85rem;cursor:pointer}
+.seg button.on{background:linear-gradient(180deg,#27449f,#1b3278);color:#fff}
+.ayuda{font-size:.78rem;color:var(--muted);margin-top:8px}
+
+/* ---- botones de control ---- */
+.btn{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  min-height:64px;padding:8px;border-radius:16px;border:1px solid #2f4799;color:var(--txt);font:inherit;
+  font-size:.74rem;font-weight:600;letter-spacing:.3px;text-transform:uppercase;cursor:pointer;
+  background:linear-gradient(180deg,#1a2f78,#10215a);box-shadow:0 5px 14px #0007,inset 0 1px 0 #ffffff1a;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  transition:transform .06s,box-shadow .15s,border-color .15s,background .15s}
+.btn svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.btn svg.fill{fill:currentColor;stroke:none}
+.btn.press,.btn:active{transform:translateY(2px) scale(.98);border-color:var(--cyan);
+  background:linear-gradient(180deg,#2a52c9,#17317f);box-shadow:0 0 22px #46d3ff66,inset 0 0 14px #46d3ff33}
+.btn.activo{border-color:var(--ok);box-shadow:0 0 22px #2de3a855}
+.btn:disabled{opacity:.38;cursor:not-allowed;filter:saturate(.5)}
+.btn:focus-visible,.icon-btn:focus-visible,.stop:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:10px;
+  width:100%;max-width:330px;aspect-ratio:1;margin:4px auto 0}
+.pad .btn{min-height:0;font-size:.68rem}
+.pad .up{grid-column:2;grid-row:1}.pad .left{grid-column:1;grid-row:2}
+.pad .right{grid-column:3;grid-row:2}.pad .down{grid-column:2;grid-row:3}
+.pad .center{grid-column:2;grid-row:2;display:grid;place-items:center}
+.pad .center button{width:100%;height:100%;border-radius:50%;border:2px solid #7a2238;color:#ffb3c2;
+  background:radial-gradient(circle,#3a1020,#220b16);cursor:pointer;touch-action:none;display:grid;place-items:center}
+.pad .center button svg{width:30px;height:30px;fill:currentColor}
+.pad .center button:active{box-shadow:0 0 22px #ff4d6d88}
+.r180 svg{transform:rotate(180deg)}.r270 svg{transform:rotate(-90deg)}.r90 svg{transform:rotate(90deg)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.nocat::after{content:"sin catálogo";position:absolute;bottom:3px;font-size:.55rem;color:var(--warn);text-transform:none}
+
+/* ---- estado / demo ---- */
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:.92rem}
+.kv dt{color:var(--muted)}.kv dd{margin:0;text-align:right;font-weight:600;word-break:break-word}
+.big{font-size:1.5rem;color:var(--cyan);letter-spacing:.5px}
+.warn-txt{color:var(--warn)}.ok-txt{color:var(--ok)}
+select,input[type=password],input[type=text]{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);
+  background:#0a1434;color:var(--txt);font:inherit}
+.row{display:flex;gap:10px;margin-top:12px}.row>*{flex:1}
+.pbtn{padding:13px;border-radius:14px;border:1px solid #2f4799;background:linear-gradient(180deg,#1f3a95,#13265f);
+  color:#fff;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
+.pbtn.go{background:linear-gradient(180deg,#1b8f6c,#10654d);border-color:#27c597}
+.pbtn.no{background:linear-gradient(180deg,#8c2540,#5e1628);border-color:#c64565}
+.pbtn:disabled{opacity:.4;cursor:not-allowed}
+.bar{height:10px;border-radius:99px;background:#0a1434;border:1px solid var(--line);overflow:hidden;margin-top:12px}
+.bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--violet),var(--cyan))}
+.bar.thin{height:6px;margin-top:6px}.bar.thin>div{background:linear-gradient(90deg,#2de3a8,#46d3ff)}
+.lista{list-style:none;margin:0;padding:0;font-size:.85rem;max-height:240px;overflow:auto}
+.lista li{display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid #1a2a5e}
+.lista li span:last-child{color:var(--muted);white-space:nowrap}
+.vacio{color:var(--muted);font-size:.85rem}
+.link{background:none;border:0;color:var(--cyan);font:inherit;font-size:.82rem;cursor:pointer;padding:4px}
+.log li{font-family:ui-monospace,Consolas,monospace;font-size:.76rem}
+.log li b{color:var(--cyan);font-weight:600}
+
+
+/* ---- joystick ---- */
+.joy{position:relative;width:min(76vw,300px);aspect-ratio:1;margin:6px auto 0;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%,#17306f 0%,#0c1840 62%,#08112b 100%);
+  border:2px solid #2f4799;box-shadow:inset 0 0 42px #000b,0 0 30px #1d3a9a55,0 10px 26px #0008;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
+.joy::before{content:"";position:absolute;inset:17%;border-radius:50%;border:1px dashed #3a55ad88}
+.joy::after{content:"";position:absolute;inset:36%;border-radius:50%;border:1px solid #3a55ad55}
+.joy.off{opacity:.38;pointer-events:none;filter:saturate(.5)}
+.joy.drag{cursor:grabbing;border-color:var(--cyan);box-shadow:inset 0 0 42px #000b,0 0 38px #46d3ff44,0 10px 26px #0008}
+.joy .mk{position:absolute;width:26px;height:26px;display:grid;place-items:center;color:#5f78c9;transition:color .12s,filter .12s}
+.joy .mk svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.joy .mk.on{color:var(--cyan);filter:drop-shadow(0 0 7px var(--cyan))}
+.mk-up{top:7%;left:calc(50% - 13px)}.mk-down{bottom:7%;left:calc(50% - 13px);transform:rotate(180deg)}
+.mk-left{left:7%;top:calc(50% - 13px);transform:rotate(-90deg)}.mk-right{right:7%;top:calc(50% - 13px);transform:rotate(90deg)}
+.joy-thumb{position:absolute;left:50%;top:50%;width:34%;height:34%;margin:-17% 0 0 -17%;border-radius:50%;
+  background:radial-gradient(circle at 35% 28%,#9be8ff,#2f78ff 52%,#1b2f93);
+  box-shadow:0 8px 20px #000b,0 0 26px #46d3ff77,inset 0 -6px 12px #0a1a6a88;
+  transition:transform .16s cubic-bezier(.2,.9,.3,1.3);will-change:transform}
+.joy.drag .joy-thumb{transition:none}
+
+/* ---- voz ---- */
+.voz{display:grid;gap:12px;justify-items:center}
+.mic{position:relative;width:128px;height:128px;border-radius:50%;border:2px solid #2f4799;color:#fff;cursor:pointer;
+  display:grid;place-items:center;align-content:center;gap:2px;font:inherit;font-size:.78rem;font-weight:700;
+  background:radial-gradient(circle at 35% 30%,#2a52c9,#12266f 70%);box-shadow:0 8px 26px #0008,0 0 30px #46d3ff33;touch-action:manipulation}
+.mic svg{width:44px;height:44px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mic.on{border-color:var(--ok);animation:onda 1.4s infinite}
+@keyframes onda{0%{box-shadow:0 0 0 0 #2de3a877,0 0 34px #2de3a866}70%{box-shadow:0 0 0 24px #2de3a800,0 0 34px #2de3a866}100%{box-shadow:0 0 0 0 #2de3a800,0 0 34px #2de3a866}}
+.mic:disabled{opacity:.4;cursor:not-allowed}
+.transcr{width:100%;text-align:center;background:#0a1434;border:1px solid var(--line);border-radius:14px;padding:12px;min-height:78px}
+#vozTexto{font-size:1.05rem}#vozTexto.interim{color:var(--muted);font-style:italic}
+.vres{margin-top:6px;font-size:.9rem;font-weight:700;min-height:1.3em}.vres.ok{color:var(--ok)}.vres.no{color:var(--warn)}
+.entrada{display:flex;gap:8px;width:100%}.entrada input{flex:1;min-width:0}.entrada .pbtn{flex:none;padding:12px 16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.chips button{border:1px solid var(--line);background:#0b1636;color:var(--txt);border-radius:999px;padding:7px 12px;font:inherit;font-size:.8rem;cursor:pointer}
+.chips button:disabled{opacity:.4}
+
+/* ---- barra de parada ---- */
+.stopbar{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px calc(var(--sar) + 14px) calc(var(--sab) + 10px) calc(var(--sal) + 14px);
+  background:linear-gradient(180deg,#040a1c00,#040a1cf2 38%)}
+.stop{display:block;width:100%;max-width:1100px;margin:0 auto;min-height:68px;border-radius:18px;border:2px solid #ff7b93;
+  color:#fff;font:inherit;font-size:1.25rem;font-weight:800;letter-spacing:2px;cursor:pointer;touch-action:manipulation;
+  background:linear-gradient(180deg,#e0334f,#a81c37);box-shadow:0 8px 26px #ff4d6d55}
+.stop:active{transform:scale(.985);box-shadow:0 0 34px #ff4d6dcc}
+.stop:disabled{opacity:.45}
+
+/* ---- dialogo y avisos ---- */
+dialog{width:min(92vw,420px);border:1px solid var(--line);border-radius:20px;background:linear-gradient(180deg,#0f1e4c,#0a1535);
+  color:var(--txt);padding:20px}
+dialog::backdrop{background:#02060fcc;backdrop-filter:blur(3px)}
+dialog label{display:block;font-size:.85rem;color:var(--muted);margin:14px 0 6px}
+.chk{display:flex!important;align-items:center;gap:8px;color:var(--txt)!important}
+.chk input{width:20px;height:20px}
+#toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--sab) + 96px);z-index:30;display:grid;gap:8px;
+  width:min(92vw,420px);pointer-events:none}
+.toast{padding:11px 14px;border-radius:12px;font-size:.9rem;background:#0c1a45f2;border:1px solid var(--line);
+  box-shadow:0 8px 24px #000a}
+.toast.err{border-color:#a8344f;background:#35101cf2}.toast.ok{border-color:#1f9c76}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M8 5l-5 7 5 7M16 5l5 7-5 7"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M3 5l5 7-5 7M21 5l-5 7 5 7"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 21h6M10 17h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z"/></symbol>
+  <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zM16.5 9a4 4 0 010 6M19 6.5a8 8 0 010 11"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.3a8 8 0 1011.4 0"/></symbol>
+  <symbol id="i-set" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM5 11a7 7 0 0014 0M12 18v3M9 21h6"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M3 15h13l2-5h3v5M5 15v3h3M13 18h3M7 10h5l2 5M3 15V9"/><circle cx="7" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#9fe3ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-car"/></svg></div>
+    <div><h1>Excavadora IoT</h1><p id="vehiculoNombre">Sin conexión</p></div>
+  </div>
+  <div class="top-right">
+    <span id="chipWs" class="chip off"><i></i><b>Desconectado</b></span>
+    <button id="btnAjustes" class="icon-btn" aria-label="Ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-set"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="aviso" class="banner" hidden></div>
+
+<main class="layout">
+  <section class="card">
+    <div class="card-h">
+      <h2>Conducción</h2>
+      <div class="seg" role="group" aria-label="Modo de control">
+        <button type="button" data-modo="pulso" class="on">Pulso</button>
+        <button type="button" data-modo="mantener">Joystick</button>
+        <button type="button" data-modo="voz">Voz</button>
+      </div>
+    </div>
+
+    <div class="pad" id="vistaPad">
+      <button class="btn up" data-codigo="1" aria-label="Avanzar"><svg><use href="#i-up"/></svg>Avanzar</button>
+      <button class="btn left r270" data-codigo="3" aria-label="Girar a la izquierda"><svg><use href="#i-up"/></svg>Izq.</button>
+      <div class="center"><button type="button" id="btnStopPad" aria-label="Detener"><svg viewBox="0 0 24 24"><use href="#i-stop"/></svg></button></div>
+      <button class="btn right r90" data-codigo="4" aria-label="Girar a la derecha"><svg><use href="#i-up"/></svg>Der.</button>
+      <button class="btn down r180" data-codigo="2" aria-label="Retroceder"><svg><use href="#i-up"/></svg>Retro.</button>
+    </div>
+
+    <div id="vistaJoy" hidden>
+      <div class="joy" id="joy" role="application" aria-label="Joystick de conducción">
+        <span class="mk mk-up" data-dir="1"><svg viewBox="0 0 24 24"><use href="#i-up"/></svg></span>
+        <span class="mk mk-down" data-dir="2"><svg viewBox="0 0 24 24"><use href="#i-up"/></svg></span>
+        <span class="mk mk-left" data-dir="3"><svg viewBox="0 0 24 24"><use href="#i-up"/></svg></span>
+        <span class="mk mk-right" data-dir="4"><svg viewBox="0 0 24 24"><use href="#i-up"/></svg></span>
+        <div class="joy-thumb" id="joyThumb"></div>
+      </div>
+    </div>
+
+    <div id="vistaVoz" hidden>
+      <div class="voz">
+        <button class="mic" id="btnMic" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><use href="#i-mic"/></svg><span id="txtMic">Toca y habla</span>
+        </button>
+        <div class="transcr">
+          <p id="vozTexto">Di una orden, por ejemplo: “avanza”.</p>
+          <p class="vres" id="vozResultado"></p>
+        </div>
+        <label class="chk" style="display:flex;align-items:center;gap:8px;font-size:.9rem">
+          <input id="chkManosLibres" type="checkbox" style="width:20px;height:20px"> Manos libres (escucha continua)
+        </label>
+        <div class="entrada">
+          <input id="txtOrden" type="text" placeholder="…o escribe una orden" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="pbtn" id="btnOrden" type="button">Enviar</button>
+        </div>
+        <div class="chips" id="chipsVoz">
+          <button type="button">avanza</button><button type="button">atrás</button>
+          <button type="button">izquierda</button><button type="button">derecha</button>
+          <button type="button">sube el brazo</button><button type="button">baja el brazo</button>
+          <button type="button">abre la pala</button><button type="button">cierra la pala</button>
+          <button type="button">luz</button><button type="button">sonido</button>
+          <button type="button">inicia la demo</button><button type="button">alto</button>
+        </div>
+        <p class="ayuda" id="ayudaVoz">Cada orden se ejecuta como un pulso. Di “alto” para detener al instante.</p>
+      </div>
+    </div>
+
+    <p class="ayuda" id="ayudaModo">Pulso: cada toque mueve el carrito unos segundos y se detiene solo.</p>
+
+    <h3>Brazo y garra</h3>
+    <div class="grid2">
+      <button class="btn" data-codigo="5"><svg><use href="#i-chev"/></svg>Subir brazo</button>
+      <button class="btn r180" data-codigo="6"><svg><use href="#i-chev"/></svg>Bajar brazo</button>
+      <button class="btn" data-codigo="7"><svg><use href="#i-open"/></svg>Abrir pala</button>
+      <button class="btn" data-codigo="8"><svg><use href="#i-close"/></svg>Cerrar pala</button>
+    </div>
+
+    <h3>Accesorios</h3>
+    <div class="grid3">
+      <button class="btn" data-codigo="10"><svg><use href="#i-bulb"/></svg>Luz</button>
+      <button class="btn" data-codigo="11"><svg><use href="#i-sound"/></svg>Sonido</button>
+      <button class="btn" data-codigo="12"><svg><use href="#i-power"/></svg>Encender</button>
+    </div>
+    <p class="ayuda" id="ayudaTeclas" hidden>Teclado: flechas o WASD · R/F brazo · Z/X pala · Espacio = detener</p>
+  </section>
+
+  <section style="display:grid;gap:14px">
+    <div class="card">
+      <div class="card-h"><h2>Estado</h2></div>
+      <dl class="kv">
+        <dt>Último comando</dt><dd class="big" id="estComando">—</dd>
+        <dt>Recibido</dt><dd id="estHora">—</dd>
+        <dt>Escuchando</dt><dd id="estEscucha">—</dd>
+      </dl>
+      <p class="ayuda">El estado muestra lo último que se ordenó. Aún no es una confirmación física del carrito.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>DEMO</h2></div>
+      <select id="selDemo" aria-label="Seleccionar DEMO"></select>
+      <div class="row">
+        <button class="pbtn go" id="btnDemoIniciar" type="button">Iniciar</button>
+        <button class="pbtn no" id="btnDemoCancelar" type="button">Cancelar</button>
+      </div>
+      <div class="bar"><div id="barDemo"></div></div>
+      <div class="bar thin"><div id="barPaso"></div></div>
+      <p class="ayuda" id="txtDemo">Sin DEMO en ejecución.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>Últimos movimientos</h2><button class="link" id="btnHist" type="button">Actualizar</button></div>
+      <ul class="lista" id="listaHist"><li class="vacio">Sin datos.</li></ul>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>Eventos en vivo</h2><button class="link" id="btnLimpiar" type="button">Limpiar</button></div>
+      <ul class="lista log" id="listaLog"></ul>
+    </div>
+  </section>
+</main>
+
+<div class="stopbar"><button class="stop" id="btnStop" type="button">■ DETENER</button></div>
+<div id="toasts" aria-live="polite"></div>
+
+<dialog id="dlg">
+  <h2>Ajustes</h2>
+  <label for="selVehiculo">Vehículo</label>
+  <select id="selVehiculo"></select>
+  <label for="inpClave">Clave de operador (X-API-Key)</label>
+  <input id="inpClave" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pega tu clave">
+  <label class="chk"><input id="chkRecordar" type="checkbox"> Recordar en este dispositivo</label>
+  <p class="ayuda">La clave no se guarda en el servidor ni en el código de la página. Sin “recordar”, se borra al cerrar la pestaña.</p>
+  <div class="row">
+    <button class="pbtn" id="btnOlvidar" type="button">Olvidar clave</button>
+    <button class="pbtn go" id="btnGuardar" type="button">Guardar y conectar</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+/* =====================  CONFIGURACIÓN  ===================== */
+const REPETIR_MS = 2400;      // en modo "Mantener": reenvía el comando antes de que la ESP32 lo detenga (3000 ms)
+const MAX_LOG = 60;
+const ORIGEN = "WEB";
+const ORIGEN_JOY = "WEB_JOYSTICK";
+const ORIGEN_VOZ = "WEB_VOZ";
+
+/* =====================  ESTADO  ===================== */
+const S = {
+  vehiculo: Number(localStorage.getItem("vehiculoId")) || 1,
+  clave: "", ws: null, wsEstado: "desconectado", intentos: 0, reconexion: null, ping: null,
+  demoActiva: false, modo: "pulso", hold: null, gen: 0,
+  voz: { activa: false, escuchando: false, manosLibres: false, rec: null, ultimo: { clave: "", t: 0 }, ultimoStop: 0 },
+  catalogo: new Map(), demos: [], vehiculos: [], noReconectar: false,
+};
+const $ = (id) => document.getElementById(id);
+const botones = [...document.querySelectorAll("[data-codigo]")];
+
+/* =====================  UTILIDADES  ===================== */
+function hora(fecha) {
+  const d = fecha ? new Date(fecha) : new Date();
+  return isNaN(d) ? "—" : d.toLocaleTimeString("es-MX", { hour12: false });
+}
+function fechaServidor(txt) {                         // la BD guarda UTC sin zona
+  if (!txt) return null;
+  return /Z|[+-]\d\d:?\d\d$/.test(txt) ? txt : txt + "Z";
+}
+function vibrar(ms = 15) { if (navigator.vibrate) navigator.vibrate(ms); }
+function toast(msg, tipo = "") {
+  const t = document.createElement("div");
+  t.className = "toast " + tipo; t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+function aviso(msg, tipo = "") {
+  const a = $("aviso");
+  if (!msg) { a.hidden = true; return; }
+  a.className = "banner " + tipo; a.textContent = msg; a.hidden = false;
+}
+function log(texto, etiqueta = "") {
+  const li = document.createElement("li");
+  const t = document.createElement("span");
+  const b = document.createElement("b"); b.textContent = hora() + " ";
+  t.textContent = (etiqueta ? etiqueta + " · " : "") + texto;
+  li.append(b, t);
+  const ul = $("listaLog"); ul.prepend(li);
+  while (ul.children.length > MAX_LOG) ul.lastChild.remove();
+}
+function mensajeError(status, data) {
+  const d = data && typeof data.detail === "string" ? data.detail : "";
+  if (status === 401) return "Clave incorrecta o faltante.";
+  if (status === 403) return "Esa clave no tiene permiso para esta acción.";
+  if (status === 422) return "Datos no válidos.";
+  if (status === 503) return "La base de datos no está disponible.";
+  return d || "Error " + status;
+}
+
+/* =====================  API HTTP  ===================== */
+async function api(ruta, { method = "GET", body } = {}) {
+  const headers = { Accept: "application/json" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (S.clave) headers["X-API-Key"] = S.clave;
+  let r;
+  try {
+    r = await fetch(ruta, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  } catch (e) {
+    const err = new Error("Sin conexión con el servidor."); err.status = 0; throw err;
+  }
+  let data = null;
+  try { data = await r.json(); } catch (_) {}
+  if (!r.ok) { const err = new Error(mensajeError(r.status, data)); err.status = r.status; throw err; }
+  return data;
+}
+
+/* =====================  MOVIMIENTOS  ===================== */
+let cola = Promise.resolve();
+function enviar(codigo, origen = ORIGEN) {
+  const gen = S.gen;
+  const tarea = cola.then(() => (codigo !== 9 && gen !== S.gen) ? null : enviarAhora(codigo, origen));
+  cola = tarea.catch(() => {});
+  return tarea;
+}
+async function enviarAhora(codigo, origen = ORIGEN) {
+  if (!S.clave) { abrirAjustes(); return null; }
+  try {
+    const r = await api(`/vehiculos/${S.vehiculo}/movimientos`, {
+      method: "POST", body: { codigo, origen },
+    });
+    mostrarEscucha(r.clientes_notificados);
+    programarHistorial();
+    return r;
+  } catch (e) {
+    if (e.status === 409 && /DEMO/i.test(e.message)) { S.demoActiva = true; actualizarControles(); }
+    if (e.status === 401) abrirAjustes();
+    toast(e.message, "err");
+    return null;
+  }
+}
+function iniciarHold(codigo, boton, origen = ORIGEN) {
+  terminarHold(false);
+  S.hold = { codigo, boton, timer: setInterval(() => enviar(codigo, origen), REPETIR_MS) };
+  enviar(codigo, origen);
+}
+function terminarHold(mandarStop = true) {
+  if (!S.hold) return;
+  clearInterval(S.hold.timer); S.hold = null;
+  if (mandarStop) { S.gen++; enviar(9); }
+}
+async function cancelarDemo() {
+  try {
+    await api(`/vehiculos/${S.vehiculo}/demos/cancelar`, { method: "POST" });
+    toast("DEMO cancelada.", "ok");
+  } catch (e) {
+    if (e.status === 409) { S.demoActiva = false; actualizarControles(); }
+    else toast(e.message, "err");
+  }
+}
+async function detenerTodo() {
+  if (S.hold) { clearInterval(S.hold.timer); S.hold = null; }
+  S.gen++;                                   // descarta órdenes aún no enviadas
+  vibrar(40);
+  if (S.demoActiva) { await cancelarDemo(); return; }
+  const r = await enviar(9);
+  if (r) log("DETENER enviado", "Control");
+}
+
+/* =====================  WEBSOCKET  ===================== */
+function setWs(estado) {
+  S.wsEstado = estado;
+  const chip = $("chipWs");
+  chip.className = "chip " + (estado === "conectado" ? "on" : estado === "conectando" ? "mid" : "off");
+  chip.querySelector("b").textContent =
+    estado === "conectado" ? "WSS en vivo" : estado === "conectando" ? "Conectando…" : "Desconectado";
+  actualizarControles();
+}
+function cerrarWS() {
+  clearTimeout(S.reconexion); clearInterval(S.ping);
+  if (S.ws) { S.ws.onclose = null; S.ws.onmessage = null; try { S.ws.close(); } catch (_) {} S.ws = null; }
+}
+function conectarWS() {
+  cerrarWS(); S.noReconectar = false;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws/vehiculos/${S.vehiculo}`);
+  S.ws = ws; setWs("conectando");
+  ws.onopen = () => {
+    S.intentos = 0; setWs("conectado"); log("Conectado al canal del vehículo " + S.vehiculo, "WSS");
+    S.ping = setInterval(() => { if (ws.readyState === 1) ws.send("ping"); }, 25000);
+  };
+  ws.onmessage = (m) => { try { manejarEvento(JSON.parse(m.data)); } catch (_) {} };
+  ws.onclose = (ev) => {
+    clearInterval(S.ping); setWs("desconectado");
+    if (S.demoActiva) { S.demoActiva = false; actualizarDemoUI(); }
+    if (ev.code === 4404) { S.noReconectar = true; aviso("Ese vehículo no existe.", "err"); return; }
+    const espera = Math.min(10000, 1000 * 2 ** Math.min(S.intentos++, 4));
+    log(`Desconectado. Reintentando en ${Math.round(espera / 1000)} s…`, "WSS");
+    S.reconexion = setTimeout(conectarWS, espera);
+  };
+}
+
+function marcarActivo(codigo) {
+  botones.forEach((b) => b.classList.toggle("activo", Number(b.dataset.codigo) === codigo));
+  clearTimeout(marcarActivo.t);
+  marcarActivo.t = setTimeout(() => botones.forEach((b) => b.classList.remove("activo")), 3000);
+}
+function mostrarEstado(ev) {
+  const cmd = ev.comando ? `${ev.comando}` : "—";
+  $("estComando").textContent = cmd;
+  $("estHora").textContent = hora(ev.timestamp);
+}
+function manejarEvento(ev) {
+  const d = ev.datos || {};
+  switch (ev.evento) {
+    case "estado_inicial":
+      mostrarEstado(ev); log("Último estado: " + (ev.comando || "sin comando"), "Estado"); break;
+    case "estado_actualizado":
+      mostrarEstado(ev); break;
+    case "movimiento_individual":
+      mostrarEstado(ev); marcarActivo(ev.codigo);
+      log(`${ev.comando} (origen ${d.origen})`, "Movimiento"); break;
+    case "demo_iniciada":
+      S.demoActiva = true; S.totalDemo = d.total_movimientos || 0;
+      actualizarDemoUI(); progreso(0, S.totalDemo);
+      log(`${d.nombre} · ${d.total_movimientos} pasos`, "DEMO iniciada"); break;
+    case "demo_movimiento":
+      S.demoActiva = true; mostrarEstado(ev); marcarActivo(ev.codigo);
+      progreso(d.orden, d.total_movimientos); pasoBarra(d.duracion_ms);
+      $("txtDemo").textContent = `Paso ${d.orden}/${d.total_movimientos}: ${ev.comando} (${d.duracion_ms} ms)`;
+      log(`${d.orden}/${d.total_movimientos} ${ev.comando} · ${d.duracion_ms} ms + ${d.pausa_ms} ms`, "DEMO"); break;
+    case "demo_finalizada":
+      S.demoActiva = false; actualizarDemoUI(); progreso(S.totalDemo, S.totalDemo);
+      $("txtDemo").textContent = "DEMO finalizada."; log("Finalizada", "DEMO"); break;
+    case "demo_cancelada":
+      S.demoActiva = false; actualizarDemoUI();
+      $("txtDemo").textContent = "DEMO cancelada."; log("Cancelada", "DEMO"); break;
+    case "error":
+      S.demoActiva = false; actualizarDemoUI();
+      toast(d.detalle || "La API informó un error.", "err"); log(d.detalle || "error", "Error"); break;
+    default: break;
+  }
+}
+
+/* =====================  INTERFAZ  ===================== */
+function mostrarEscucha(n) {
+  if (typeof n !== "number") return;
+  const el = $("estEscucha");
+  el.textContent = n + (n <= 1 ? " · solo esta pantalla" : " dispositivos");
+  el.className = n <= 1 ? "warn-txt" : "ok-txt";
+  if (n <= 1) aviso("Solo esta pantalla está escuchando: la ESP32 podría estar desconectada.", "");
+  else aviso("");
+}
+function listoParaMover() { return S.wsEstado === "conectado" && !!S.clave && !S.demoActiva; }
+function actualizarControles() {
+  const listo = listoParaMover();
+  if (!listo && S.hold) terminarHold(!S.demoActiva);      // seguridad: soltar todo si se bloquea el control
+  $("joy").classList.toggle("off", !listo);
+  $("btnMic").disabled = !S.clave || !vozSoportada();
+  $("txtOrden").disabled = !S.clave;
+  $("btnOrden").disabled = !S.clave;
+  botones.forEach((b) => {
+    const c = Number(b.dataset.codigo);
+    const cat = S.catalogo.get(c);
+    const enCat = S.catalogo.size === 0 || (cat && cat.activo);
+    b.disabled = !(listo && enCat);
+    b.classList.toggle("nocat", S.catalogo.size > 0 && !enCat);
+  });
+  $("btnStop").disabled = !S.clave;
+  $("btnStopPad").disabled = !S.clave;
+  $("btnDemoIniciar").disabled = !(S.wsEstado === "conectado" && S.clave && !S.demoActiva && S.demos.length);
+  $("btnDemoCancelar").disabled = !(S.clave && S.demoActiva);
+  if (!S.clave) aviso("Falta la clave de operador. Ábrela en Ajustes.", "info");
+  else if (S.demoActiva) aviso("DEMO en ejecución: los controles están bloqueados. Usa DETENER para cancelarla.", "info");
+  else if (S.wsEstado !== "conectado") aviso("Sin conexión en vivo. Reconectando…", "err");
+}
+function actualizarDemoUI() {
+  actualizarControles();
+  if (!S.demoActiva) { $("barPaso").style.width = "0"; botones.forEach((b) => b.classList.remove("activo")); }
+}
+function progreso(n, total) {
+  $("barDemo").style.width = total ? Math.round((n / total) * 100) + "%" : "0";
+}
+function pasoBarra(ms) {
+  const b = $("barPaso");
+  b.style.transition = "none"; b.style.width = "0";
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    b.style.transition = `width ${ms}ms linear`; b.style.width = "100%";
+  }));
+}
+
+/* ---- carga de datos ---- */
+async function cargarVehiculos() {
+  try {
+    S.vehiculos = await api("/vehiculos");
+    const sel = $("selVehiculo"); sel.replaceChildren();
+    S.vehiculos.forEach((v) => {
+      const o = document.createElement("option");
+      o.value = v.id_vehiculo; o.textContent = `${v.nombre} (#${v.id_vehiculo})${v.activo ? "" : " · inactivo"}`;
+      sel.appendChild(o);
+    });
+    if (!S.vehiculos.some((v) => v.id_vehiculo === S.vehiculo) && S.vehiculos.length) S.vehiculo = S.vehiculos[0].id_vehiculo;
+    sel.value = S.vehiculo;
+    const v = S.vehiculos.find((x) => x.id_vehiculo === S.vehiculo);
+    $("vehiculoNombre").textContent = v ? `${v.nombre} · ${v.microcontrolador || "IoT"}` : "Vehículo " + S.vehiculo;
+  } catch (e) { toast(e.message, "err"); }
+}
+async function cargarCatalogo() {
+  try {
+    const lista = await api(`/vehiculos/${S.vehiculo}/comandos`);
+    S.catalogo = new Map(lista.map((c) => [c.codigo, c]));
+  } catch (e) { S.catalogo = new Map(); toast(e.message, "err"); }
+  actualizarControles();
+}
+async function cargarDemos() {
+  try {
+    S.demos = (await api(`/vehiculos/${S.vehiculo}/demos`)).filter((d) => d.activo);
+  } catch (e) { S.demos = []; toast(e.message, "err"); }
+  const sel = $("selDemo"); sel.replaceChildren();
+  if (!S.demos.length) {
+    const o = document.createElement("option"); o.textContent = "No hay DEMO activas"; sel.appendChild(o);
+  }
+  S.demos.forEach((d) => {
+    const o = document.createElement("option"); o.value = d.id_demo; o.textContent = d.nombre; sel.appendChild(o);
+  });
+  actualizarControles();
+}
+async function cargarEjecucion() {
+  try {
+    const e = await api(`/vehiculos/${S.vehiculo}/demos/ejecucion`);
+    S.demoActiva = !!e.en_ejecucion;
+    if (e.en_ejecucion) { S.totalDemo = e.total_movimientos; progreso(e.movimientos_emitidos, e.total_movimientos); }
+  } catch (_) {}
+  actualizarDemoUI();
+}
+let tHist = null;
+function programarHistorial() { clearTimeout(tHist); tHist = setTimeout(cargarHistorial, 600); }
+async function cargarHistorial() {
+  const ul = $("listaHist");
+  try {
+    const h = await api(`/vehiculos/${S.vehiculo}/historial`);
+    ul.replaceChildren();
+    if (!h.movimientos.length) { const li = document.createElement("li"); li.className = "vacio"; li.textContent = "Aún no hay movimientos."; ul.appendChild(li); return; }
+    h.movimientos.forEach((m) => {
+      const li = document.createElement("li");
+      const a = document.createElement("span"); a.textContent = `${m.comando || "—"} · ${m.origen}`;
+      const b = document.createElement("span"); b.textContent = hora(fechaServidor(m.fecha_hora));
+      li.append(a, b); ul.appendChild(li);
+    });
+  } catch (e) { /* el aviso principal ya informa los problemas de conexión */ }
+}
+async function iniciarDemo() {
+  const id = Number($("selDemo").value);
+  if (!id) return;
+  try {
+    const r = await api(`/vehiculos/${S.vehiculo}/demos/${id}/iniciar`, { method: "POST" });
+    mostrarEscucha(r.clientes_websocket);
+    toast(`DEMO “${r.nombre}” aceptada (${r.total_movimientos} pasos).`, "ok");
+  } catch (e) {
+    if (e.status === 401) abrirAjustes();
+    toast(e.message, "err");
+  }
+}
+
+/* ---- ajustes ---- */
+function abrirAjustes() {
+  $("inpClave").value = S.clave;
+  $("chkRecordar").checked = !!localStorage.getItem("claveApi");
+  if (!$("dlg").open) $("dlg").showModal();
+}
+async function guardarAjustes() {
+  const clave = $("inpClave").value.trim();
+  const veh = Number($("selVehiculo").value) || 1;
+  if (!clave) { toast("Escribe la clave de operador.", "err"); return; }
+  S.clave = clave;
+  try {
+    const s = await api("/sesion");
+    toast("Clave válida (" + s.rol + ").", "ok");
+  } catch (e) {
+    S.clave = ""; toast(e.message, "err"); actualizarControles(); return;
+  }
+  sessionStorage.setItem("claveApi", clave);
+  if ($("chkRecordar").checked) localStorage.setItem("claveApi", clave); else localStorage.removeItem("claveApi");
+  const cambio = veh !== S.vehiculo;
+  S.vehiculo = veh; localStorage.setItem("vehiculoId", String(veh));
+  $("dlg").close(); aviso("");
+  if (cambio || S.wsEstado === "desconectado") await arrancar();
+  else actualizarControles();
+}
+function olvidarClave() {
+  S.clave = ""; $("inpClave").value = "";
+  sessionStorage.removeItem("claveApi"); localStorage.removeItem("claveApi");
+  actualizarControles(); toast("Clave olvidada en este dispositivo.");
+}
+
+/* ---- botones: Pulso / Mantener ---- */
+function armarBoton(b) {
+  const codigo = Number(b.dataset.codigo);
+  const esMovimiento = codigo >= 1 && codigo <= 8;
+  b.addEventListener("pointerdown", (e) => {
+    if (b.disabled) return;
+    e.preventDefault();
+    if (b.setPointerCapture) { try { b.setPointerCapture(e.pointerId); } catch (_) {} }
+    b.classList.add("press"); vibrar();
+    if (S.modo === "mantener" && esMovimiento) iniciarHold(codigo, b); else enviar(codigo);
+  });
+  const soltar = () => { b.classList.remove("press"); if (S.hold && S.hold.boton === b) terminarHold(); };
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => b.addEventListener(t, soltar));
+  b.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+botones.forEach(armarBoton);
+
+const AYUDA_MODO = {
+  pulso: "Pulso: cada toque mueve el carrito unos segundos y se detiene solo.",
+  mantener: "Joystick: arrastra la bola; se mueve mientras la mantienes fuera del centro y se detiene al soltar. Los botones de brazo y pala también funcionan manteniéndolos pulsados.",
+  voz: "Voz: cada orden se ejecuta como un pulso. Di “alto” para detener al instante.",
+};
+function setModo(modo) {
+  if (!AYUDA_MODO[modo]) modo = "pulso";
+  if (S.modo === "voz" && modo !== "voz") detenerVoz();
+  if (S.hold) terminarHold(true);
+  joySoltar();
+  S.modo = modo; localStorage.setItem("modo", modo);
+  document.querySelectorAll("[data-modo]").forEach((x) => x.classList.toggle("on", x.dataset.modo === modo));
+  $("vistaPad").hidden = modo !== "pulso";
+  $("vistaJoy").hidden = modo !== "mantener";
+  $("vistaVoz").hidden = modo !== "voz";
+  $("ayudaModo").textContent = AYUDA_MODO[modo];
+  actualizarControles();
+}
+document.querySelectorAll("[data-modo]").forEach((b) => b.addEventListener("click", () => setModo(b.dataset.modo)));
+
+// DETENER: responde al instante al tocar (y también con teclado)
+[$("btnStop"), $("btnStopPad")].forEach((b) => {
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); detenerTodo(); });
+  b.addEventListener("click", (e) => { if (e.detail === 0) detenerTodo(); });
+});
+$("btnDemoIniciar").addEventListener("click", iniciarDemo);
+$("btnDemoCancelar").addEventListener("click", cancelarDemo);
+$("btnHist").addEventListener("click", cargarHistorial);
+$("btnLimpiar").addEventListener("click", () => $("listaLog").replaceChildren());
+$("btnAjustes").addEventListener("click", abrirAjustes);
+$("btnGuardar").addEventListener("click", guardarAjustes);
+$("btnOlvidar").addEventListener("click", olvidarClave);
+
+/* ---- seguridad: soltar todo si la pantalla se oculta ---- */
+document.addEventListener("visibilitychange", () => { if (document.hidden) { if (S.hold) terminarHold(); joySoltar(); detenerVoz(); } });
+window.addEventListener("blur", () => { if (S.hold) terminarHold(); joySoltar(); });
+
+/* ---- teclado (escritorio) ---- */
+const TECLAS = { arrowup: 1, w: 1, arrowdown: 2, s: 2, arrowleft: 3, a: 3, arrowright: 4, d: 4, r: 5, f: 6, z: 7, x: 8 };
+const abajo = new Set();
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input,select,textarea,dialog") || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === " " || k === "escape") { e.preventDefault(); detenerTodo(); return; }
+  const codigo = TECLAS[k];
+  if (!codigo || e.repeat || abajo.has(k)) return;
+  e.preventDefault(); abajo.add(k);
+  const b = botones.find((x) => Number(x.dataset.codigo) === codigo);
+  if (!b || b.disabled) return;
+  b.classList.add("press");
+  if (S.modo === "mantener") iniciarHold(codigo, b); else enviar(codigo);
+});
+document.addEventListener("keyup", (e) => {
+  const k = e.key.toLowerCase(); const codigo = TECLAS[k];
+  if (!codigo) return;
+  abajo.delete(k);
+  const b = botones.find((x) => Number(x.dataset.codigo) === codigo);
+  if (b) b.classList.remove("press");
+  if (S.hold && S.hold.codigo === codigo) terminarHold();
+});
+if (matchMedia("(hover:hover) and (pointer:fine)").matches) $("ayudaTeclas").hidden = false;
+
+
+/* =====================  JOYSTICK  ===================== */
+const joy = $("joy"), joyThumb = $("joyThumb");
+const JOY = { activo: false, dir: null, pid: null };
+const ANGULO_DIR = { 1: -90, 2: 90, 3: 180, 4: 0 };         // grados, eje Y hacia abajo
+const HISTERESIS_GRADOS = 12;                                  // evita saltos entre direcciones
+
+function difAngulo(a, b) { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
+// Devuelve 1 (avanzar), 2 (retroceder), 3 (izquierda), 4 (derecha) o null (zona muerta).
+function joyDireccion(dx, dy, recorrido, actual) {
+  const zona = recorrido * (actual ? 0.24 : 0.36);          // entrar cuesta más que salir
+  if (Math.hypot(dx, dy) < zona) return null;
+  const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+  if (actual && difAngulo(ang, ANGULO_DIR[actual]) <= 45 + HISTERESIS_GRADOS) return actual;
+  let mejor = null, min = 999;
+  for (const c of [1, 2, 3, 4]) {
+    const d = difAngulo(ang, ANGULO_DIR[c]);
+    if (d < min) { min = d; mejor = c; }
+  }
+  return mejor;
+}
+function joyMarcar(dir) {
+  document.querySelectorAll(".mk").forEach((m) => m.classList.toggle("on", Number(m.dataset.dir) === dir));
+}
+function joyMover(e) {
+  const r = joy.getBoundingClientRect();
+  const R = r.width / 2, recorrido = R * 0.58;
+  const dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R);
+  const dist = Math.hypot(dx, dy), k = dist > recorrido ? recorrido / dist : 1;
+  joyThumb.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+  const dir = joyDireccion(dx * k, dy * k, recorrido, JOY.dir);
+  if (dir === JOY.dir) return;
+  JOY.dir = dir; joyMarcar(dir); vibrar(10);
+  if (dir) iniciarHold(dir, joy, ORIGEN_JOY);                 // cambia de dirección sin pasar por DETENER
+  else terminarHold(true);                                    // volvió al centro: DETENER
+}
+function joySoltar() {
+  const estaba = JOY.activo || JOY.dir !== null;
+  JOY.activo = false; JOY.dir = null; JOY.pid = null;
+  joy.classList.remove("drag"); joyThumb.style.transform = ""; joyMarcar(null);
+  if (S.hold && S.hold.boton === joy) terminarHold(true);
+  return estaba;
+}
+joy.addEventListener("pointerdown", (e) => {
+  if (joy.classList.contains("off")) return;
+  e.preventDefault();
+  if (joy.setPointerCapture) { try { joy.setPointerCapture(e.pointerId); } catch (_) {} }
+  JOY.activo = true; JOY.pid = e.pointerId; joy.classList.add("drag");
+  joyMover(e);
+});
+joy.addEventListener("pointermove", (e) => { if (JOY.activo && e.pointerId === JOY.pid) joyMover(e); });
+["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => joy.addEventListener(t, () => { if (JOY.activo) joySoltar(); }));
+joy.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* =====================  VOZ  ===================== */
+const ETIQUETAS = { 1: "AVANZAR", 2: "RETROCEDER", 3: "GIRAR A LA IZQUIERDA", 4: "GIRAR A LA DERECHA",
+  5: "SUBIR BRAZO", 6: "BAJAR BRAZO", 7: "ABRIR PALA", 8: "CERRAR PALA", 10: "LUZ", 11: "SONIDO", 12: "ENCENDER / APAGAR" };
+const RX = {
+  stop: /\b(alto|stop|deten|detente|detener|detenlo|parar|pare|frena|frenar|freno|basta|emergencia)\b/,
+  cancelar: /\b(cancela|cancelar|cancelalo|aborta|abortar)\b/,
+  demo: /\b(demo|demostracion)\b/,
+  luz: /\b(luz|luces|faro|faros)\b/,
+  sonido: /\b(sonido|claxon|bocina|pito)\b/,
+  encendido: /\b(enciende|encender|prende|prender|apaga|apagar)\b/,
+};
+const MOVIMIENTOS_VOZ = [
+  [1, /\b(avanza|avanzar|adelante|frente|recto|avance)\b/],
+  [2, /\b(retrocede|retroceder|atras|reversa|reversar)\b/],
+  [3, /\b(izquierda|izquierdo)\b/],
+  [4, /\b(derecha)\b/],
+  [5, /\b(sube|subir|levanta|levantar|alza|alzar|arriba|eleva|elevar)\b/],
+  [6, /\b(baja|bajar|abajo|desciende|descender)\b/],
+  [7, /\b(abre|abrir|abierta)\b/],
+  [8, /\b(cierra|cerrar|cerrada)\b/],
+];
+function normalizar(t) {
+  return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+// Interpreta una frase. "alto" tiene prioridad sobre cualquier otra palabra.
+function interpretarOrden(texto) {
+  const t = normalizar(texto);
+  if (!t) return null;
+  if (RX.stop.test(t)) return { tipo: "stop" };
+  if (RX.cancelar.test(t)) return { tipo: "cancelar" };
+  if (RX.demo.test(t)) return { tipo: "demo" };
+  if (RX.luz.test(t)) return { tipo: "mov", codigo: 10 };
+  if (RX.sonido.test(t)) return { tipo: "mov", codigo: 11 };
+  if (RX.encendido.test(t)) return { tipo: "mov", codigo: 12 };
+  let mejor = null, pos = Infinity;
+  for (const [codigo, rx] of MOVIMIENTOS_VOZ) {                // gana la primera palabra que se dijo
+    const m = rx.exec(t);
+    if (m && m.index < pos) { pos = m.index; mejor = codigo; }
+  }
+  return mejor ? { tipo: "mov", codigo: mejor } : null;
+}
+function vozResultado(texto, clase) {
+  const el = $("vozResultado"); el.textContent = texto; el.className = "vres " + (clase || "");
+}
+function pararPorVoz() {
+  const ahora = Date.now();
+  if (ahora - S.voz.ultimoStop < 1500) return;                  // evita enviar dos veces (parcial + final)
+  S.voz.ultimoStop = ahora;
+  vozResultado("ALTO → DETENER", "ok"); log("ALTO", "Voz");
+  detenerTodo();
+}
+async function ejecutarOrdenVoz(texto) {
+  const r = interpretarOrden(texto);
+  if (!r) { vozResultado(`No entendí: “${texto}”`, "no"); return false; }
+  if (r.tipo === "stop") { pararPorVoz(); return true; }
+  const clave = r.tipo + (r.codigo || ""), ahora = Date.now();
+  if (S.voz.ultimo.clave === clave && ahora - S.voz.ultimo.t < 900) return true;   // duplicado
+  S.voz.ultimo = { clave, t: ahora };
+  if (r.tipo === "cancelar") {
+    vozResultado("Cancelar", "ok"); log("cancelar", "Voz");
+    if (S.demoActiva) await cancelarDemo(); else await detenerTodo();
+    return true;
+  }
+  if (r.tipo === "demo") {
+    if (S.demoActiva) { toast("Ya hay una DEMO en ejecución.", "err"); return false; }
+    vozResultado("Iniciar DEMO", "ok"); log("iniciar DEMO", "Voz");
+    await iniciarDemo(); return true;
+  }
+  const nombre = ETIQUETAS[r.codigo] || "código " + r.codigo;
+  if (S.demoActiva) { vozResultado("DEMO en ejecución: solo “alto” o “cancela”.", "no"); return false; }
+  if (!listoParaMover()) { vozResultado("Sin conexión en vivo o sin clave.", "no"); return false; }
+  const cat = S.catalogo.get(r.codigo);
+  if (S.catalogo.size > 0 && !(cat && cat.activo)) { vozResultado(nombre + " no está en el catálogo.", "no"); return false; }
+  vozResultado("Entendí: " + nombre, "ok"); log(`“${texto}” → ${nombre}`, "Voz");
+  vibrar();
+  await enviar(r.codigo, ORIGEN_VOZ);
+  return true;
+}
+
+function vozSoportada() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function actualizarVozUI() {
+  const on = S.voz.escuchando;
+  $("btnMic").classList.toggle("on", on);
+  $("btnMic").setAttribute("aria-pressed", String(on));
+  $("txtMic").textContent = on ? "Escuchando…" : (S.voz.activa ? "Iniciando…" : "Toca y habla");
+}
+function crearReconocedor() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const rec = new SR();
+  rec.lang = "es-MX"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 3;
+  rec.onstart = () => { S.voz.escuchando = true; actualizarVozUI(); };
+  rec.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i], txt = res[0].transcript;
+      $("vozTexto").textContent = txt; $("vozTexto").className = res.isFinal ? "" : "interim";
+      if (!res.isFinal) { if (RX.stop.test(normalizar(txt))) pararPorVoz(); continue; }   // "alto" sin esperar el final
+      let hecho = false;
+      for (let k = 0; k < res.length && !hecho; k++) {
+        if (interpretarOrden(res[k].transcript)) { ejecutarOrdenVoz(res[k].transcript); hecho = true; }
+      }
+      if (!hecho) ejecutarOrdenVoz(txt);
+    }
+  };
+  rec.onerror = (e) => {
+    const msg = { "not-allowed": "Permiso de micrófono denegado.", "service-not-allowed": "Permiso de micrófono denegado.",
+      "audio-capture": "No se detecta un micrófono.", "network": "El reconocimiento de voz necesita internet." }[e.error];
+    if (msg) { toast(msg, "err"); S.voz.activa = false; }
+  };
+  rec.onend = () => {
+    S.voz.escuchando = false;
+    if (S.voz.activa && S.voz.manosLibres && S.modo === "voz" && !document.hidden) {
+      setTimeout(() => { if (S.voz.activa) { try { rec.start(); } catch (_) {} } }, 300);   // sigue escuchando
+    } else { S.voz.activa = false; }
+    actualizarVozUI();
+  };
+  return rec;
+}
+function iniciarVoz() {
+  if (!S.clave) { abrirAjustes(); return; }
+  if (!S.voz.rec) S.voz.rec = crearReconocedor();
+  if (!S.voz.rec) { toast("Tu navegador no admite reconocimiento de voz.", "err"); return; }
+  S.voz.activa = true; actualizarVozUI();
+  try { S.voz.rec.start(); } catch (_) { /* ya estaba iniciado */ }
+}
+function detenerVoz() {
+  S.voz.activa = false;
+  if (S.voz.rec) { try { S.voz.rec.abort(); } catch (_) {} }
+  S.voz.escuchando = false; actualizarVozUI();
+}
+$("btnMic").addEventListener("click", () => { if (S.voz.activa) detenerVoz(); else iniciarVoz(); });
+$("chkManosLibres").addEventListener("change", (e) => { S.voz.manosLibres = !!e.target.checked; });
+function enviarTexto() {
+  const t = $("txtOrden").value.trim();
+  if (!t) return;
+  $("vozTexto").textContent = t; $("vozTexto").className = "";
+  $("txtOrden").value = "";
+  ejecutarOrdenVoz(t);
+}
+$("btnOrden").addEventListener("click", enviarTexto);
+$("txtOrden").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); enviarTexto(); } });
+document.querySelectorAll("#chipsVoz button").forEach((b) => b.addEventListener("click", () => {
+  $("vozTexto").textContent = b.textContent; $("vozTexto").className = "";
+  ejecutarOrdenVoz(b.textContent);
+}));
+if (!vozSoportada()) $("ayudaVoz").textContent = "Este navegador no admite reconocimiento de voz (usa Chrome o Safari). Puedes escribir la orden abajo.";
+
+/* =====================  ARRANQUE  ===================== */
+async function arrancar() {
+  await cargarVehiculos();
+  await Promise.all([cargarCatalogo(), cargarDemos(), cargarEjecucion(), cargarHistorial()]);
+  conectarWS();
+}
+(async function init() {
+  S.clave = sessionStorage.getItem("claveApi") || localStorage.getItem("claveApi") || "";
+  setModo(localStorage.getItem("modo") || "pulso");
+  if (S.clave) {
+    try { await api("/sesion"); }
+    catch (e) { if (e.status === 401) { S.clave = ""; sessionStorage.removeItem("claveApi"); localStorage.removeItem("claveApi"); } }
+  }
+  await arrancar();
+  if (!S.clave) abrirAjustes();
+})();
+</script>
+</body>
+</html>
