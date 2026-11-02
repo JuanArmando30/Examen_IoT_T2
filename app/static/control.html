@@ -379,8 +379,9 @@ const S = {
   vehiculo: Number(localStorage.getItem("vehiculoId")) || 1,
   clave: "", ws: null, wsEstado: "desconectado", intentos: 0, reconexion: null, ping: null,
   demoActiva: false, modo: "pulso", hold: null, gen: 0,
-  voz: { activa: false, escuchando: false, manosLibres: false, rec: null, ultimo: { clave: "", t: 0 }, ultimoStop: 0 },
-  catalogo: new Map(), demos: [], vehiculos: [], noReconectar: false,
+  voz: { activa: false, escuchando: false, manosLibres: false, rec: null, sesion: null, vigilante: null, esperaAudioMs: 7000,
+         ultimo: { clave: "", t: 0 }, ultimoStop: 0 },
+  catalogo: new Map(), demos: [], vehiculos: [], noReconectar: false, timeoutMs: 8000,
 };
 const $ = (id) => document.getElementById(id);
 const botones = [...document.querySelectorAll("[data-codigo]")];
@@ -394,12 +395,12 @@ function fechaServidor(txt) {                         // la BD guarda UTC sin zo
   if (!txt) return null;
   return /Z|[+-]\d\d:?\d\d$/.test(txt) ? txt : txt + "Z";
 }
-function vibrar(ms = 15) { if (navigator.vibrate) navigator.vibrate(ms); }
+function vibrar(ms = 15) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {} }
 function toast(msg, tipo = "") {
   const t = document.createElement("div");
   t.className = "toast " + tipo; t.textContent = msg;
   $("toasts").appendChild(t);
-  setTimeout(() => t.remove(), 3200);
+  setTimeout(() => t.remove(), tipo === "err" ? 6500 : 3200);
 }
 function aviso(msg, tipo = "") {
   const a = $("aviso");
@@ -430,11 +431,14 @@ async function api(ruta, { method = "GET", body } = {}) {
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (S.clave) headers["X-API-Key"] = S.clave;
   let r;
+  const ctrl = new AbortController();
+  const limite = setTimeout(() => ctrl.abort(), S.timeoutMs);
   try {
-    r = await fetch(ruta, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    r = await fetch(ruta, { method, headers, signal: ctrl.signal, body: body !== undefined ? JSON.stringify(body) : undefined });
   } catch (e) {
-    const err = new Error("Sin conexión con el servidor."); err.status = 0; throw err;
-  }
+    const err = new Error(e && e.name === "AbortError" ? "El servidor no respondió a tiempo." : "Sin conexión con el servidor.");
+    err.status = 0; throw err;
+  } finally { clearTimeout(limite); }
   let data = null;
   try { data = await r.json(); } catch (_) {}
   if (!r.ok) { const err = new Error(mensajeError(r.status, data)); err.status = r.status; throw err; }
@@ -770,7 +774,15 @@ $("btnGuardar").addEventListener("click", guardarAjustes);
 $("btnOlvidar").addEventListener("click", olvidarClave);
 
 /* ---- seguridad: soltar todo si la pantalla se oculta ---- */
-document.addEventListener("visibilitychange", () => { if (document.hidden) { if (S.hold) terminarHold(); joySoltar(); detenerVoz(); } });
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) return;
+  if (S.hold) terminarHold(); joySoltar();
+  clearTimeout(S.ocultoT);
+  S.ocultoT = setTimeout(() => { if (document.hidden) detenerVoz(); }, 1500);   // solo si de verdad se quedó oculta
+});
+window.addEventListener("unhandledrejection", (e) => {
+  toast("Error: " + ((e.reason && e.reason.message) || e.reason), "err");
+});
 window.addEventListener("blur", () => { if (S.hold) terminarHold(); joySoltar(); });
 
 /* ---- teclado (escritorio) ---- */
@@ -932,8 +944,19 @@ async function ejecutarOrdenVoz(texto) {
   if (S.catalogo.size > 0 && !(cat && cat.activo)) { vozResultado(nombre + " no está en el catálogo.", "no"); return false; }
   vozResultado("Entendí: " + nombre, "ok"); log(`“${texto}” → ${nombre}`, "Voz");
   vibrar();
-  await enviar(r.codigo, ORIGEN_VOZ);
+  vozResultado(nombre + " · enviando…", "ok");
+  const resp = await enviar(r.codigo, ORIGEN_VOZ);
+  if (!resp) { vozResultado(nombre + " · NO se pudo enviar (mira el aviso rojo)", "no"); return false; }
+  const n = resp.clientes_notificados;
+  if (n <= 1) vozResultado(`${nombre} · enviado, pero solo ${n} dispositivo escucha: la ESP32 no parece conectada`, "no");
+  else vozResultado(`${nombre} · enviado ✓ (${n} dispositivos escuchando)`, "ok");
   return true;
+}
+function ejecutarSeguro(texto) {
+  return ejecutarOrdenVoz(texto).catch((e) => {
+    const m = (e && e.message) || String(e);
+    vozResultado("Error: " + m, "no"); toast("Error al ejecutar la orden: " + m, "err");
+  });
 }
 
 function vozSoportada() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
@@ -943,33 +966,46 @@ function actualizarVozUI() {
   $("btnMic").setAttribute("aria-pressed", String(on));
   $("txtMic").textContent = on ? "Escuchando…" : (S.voz.activa ? "Iniciando…" : "Toca y habla");
 }
+function vozEsActual(rec) { return S.voz.rec === rec; }
 function crearReconocedor() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
   const rec = new SR();
   rec.lang = "es-MX"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 3;
   rec.onstart = () => {
-    S.voz.escuchando = true; S.voz.sesion = { resultados: 0, error: null, sonido: false };
+    if (!vozEsActual(rec)) return;
+    S.voz.escuchando = true; S.voz.sesion = { resultados: 0, error: null, sonido: false, audio: false };
     vozEstado("Micrófono activado. Habla ahora…"); actualizarVozUI();
+    clearTimeout(S.voz.vigilante);
+    S.voz.vigilante = setTimeout(() => {                       // si el micrófono nunca empieza a capturar audio
+      if (vozEsActual(rec) && S.voz.sesion && !S.voz.sesion.audio) {
+        vozEstado("El micrófono no empezó a capturar audio. Revisa el permiso del micrófono de Chrome en Ajustes de Android, cierra apps que lo usen y vuelve a tocar el botón.");
+        try { rec.abort(); } catch (_) {}
+      }
+    }, S.voz.esperaAudioMs);
   };
-  rec.onaudiostart = () => vozEstado("Micrófono abierto. Habla ahora…");
-  rec.onsoundstart = () => { S.voz.sesion.sonido = true; vozEstado("Se detecta sonido…"); };
-  rec.onspeechstart = () => vozEstado("Se detecta voz…");
-  rec.onnomatch = () => vozEstado("No se reconoció lo que dijiste. Intenta de nuevo.");
+  rec.onaudiostart = () => { if (!vozEsActual(rec) || !S.voz.sesion) return; S.voz.sesion.audio = true; vozEstado("Micrófono abierto. Habla ahora…"); };
+  rec.onsoundstart = () => { if (!vozEsActual(rec) || !S.voz.sesion) return; S.voz.sesion.audio = true; S.voz.sesion.sonido = true; vozEstado("Se detecta sonido…"); };
+  rec.onspeechstart = () => { if (vozEsActual(rec)) vozEstado("Se detecta voz…"); };
+  rec.onnomatch = () => { if (vozEsActual(rec)) vozEstado("No se reconoció lo que dijiste. Intenta de nuevo."); };
   rec.onresult = (e) => {
-    S.voz.sesion.resultados++; vozEstado("Texto recibido.");
+    if (!vozEsActual(rec)) return;
+    if (S.voz.sesion) { S.voz.sesion.resultados++; S.voz.sesion.audio = true; }
+    vozEstado("Texto recibido.");
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const res = e.results[i], txt = res[0].transcript;
       $("vozTexto").textContent = txt; $("vozTexto").className = res.isFinal ? "" : "interim";
       if (!res.isFinal) { if (RX.stop.test(normalizar(txt))) pararPorVoz(); continue; }   // "alto" sin esperar el final
       let hecho = false;
       for (let k = 0; k < res.length && !hecho; k++) {
-        if (interpretarOrden(res[k].transcript)) { ejecutarOrdenVoz(res[k].transcript); hecho = true; }
+        if (interpretarOrden(res[k].transcript)) { ejecutarSeguro(res[k].transcript); hecho = true; }
       }
-      if (!hecho) ejecutarOrdenVoz(txt);
+      if (!hecho) ejecutarSeguro(txt);
+      if (!S.voz.manosLibres) { try { rec.stop(); } catch (_) {} }   // una frase por toque
     }
   };
   rec.onerror = (e) => {
+    if (!vozEsActual(rec)) return;
     const m = {
       "not-allowed": "Permiso de micrófono denegado. Toca el candado de la barra de direcciones → Permisos → Micrófono → Permitir.",
       "service-not-allowed": "Este navegador no permite el servicio de reconocimiento de voz (suele pasar en teléfonos sin servicios de Google). Prueba con Chrome o dicta en el campo de texto.",
@@ -984,6 +1020,8 @@ function crearReconocedor() {
     if (e.error !== "no-speech") { toast(m || "Error de voz: " + e.error, "err"); S.voz.activa = false; }
   };
   rec.onend = () => {
+    if (!vozEsActual(rec)) return;                               // sesión anterior: se ignora
+    clearTimeout(S.voz.vigilante);
     S.voz.escuchando = false;
     const ses = S.voz.sesion;
     if (ses && !ses.error && ses.resultados === 0) {
@@ -992,22 +1030,33 @@ function crearReconocedor() {
         : "La escucha terminó sin oír nada. Revisa el permiso del micrófono; si funciona en otras apps, este navegador quizá no tiene reconocimiento de voz (prueba Chrome).");
     }
     if (S.voz.activa && S.voz.manosLibres && S.modo === "voz" && !document.hidden) {
-      setTimeout(() => { if (S.voz.activa) { try { rec.start(); } catch (_) {} } }, 300);   // sigue escuchando
+      setTimeout(() => { if (S.voz.activa && S.modo === "voz") lanzarSesionVoz(); }, 400);   // nueva sesión limpia
     } else { S.voz.activa = false; }
     actualizarVozUI();
   };
   return rec;
 }
+// Cada sesión usa un reconocedor NUEVO: en Chrome para Android reutilizar el mismo suele dejarlo "escuchando" sin oír nada.
+function lanzarSesionVoz() {
+  const rec = crearReconocedor();
+  if (!rec) { vozEstado("Reconocimiento de voz no disponible en este navegador."); S.voz.activa = false; actualizarVozUI(); return; }
+  S.voz.rec = rec;
+  try { rec.start(); }
+  catch (e) { vozEstado("No se pudo iniciar el micrófono: " + ((e && e.message) || e)); S.voz.activa = false; actualizarVozUI(); }
+}
 function iniciarVoz() {
   if (!S.clave) { abrirAjustes(); return; }
-  if (!S.voz.rec) S.voz.rec = crearReconocedor();
-  if (!S.voz.rec) { const m = "Este navegador no admite reconocimiento de voz. Usa Chrome o dicta en el campo de texto."; vozEstado(m); toast(m, "err"); return; }
+  if (!vozSoportada()) {
+    const m = "Este navegador no admite reconocimiento de voz. Usa Chrome o dicta en el campo de texto.";
+    vozEstado(m); toast(m, "err"); return;
+  }
   S.voz.activa = true; actualizarVozUI(); vozEstado("Solicitando micrófono…");
-  try { S.voz.rec.start(); } catch (_) { /* ya estaba iniciado */ }
+  lanzarSesionVoz();
 }
 function detenerVoz() {
-  S.voz.activa = false;
-  if (S.voz.rec) { try { S.voz.rec.abort(); } catch (_) {} }
+  S.voz.activa = false; clearTimeout(S.voz.vigilante);
+  const rec = S.voz.rec; S.voz.rec = null;                       // la sesión queda obsoleta
+  if (rec) { try { rec.abort(); } catch (_) {} }
   S.voz.escuchando = false; actualizarVozUI();
 }
 $("btnMic").addEventListener("click", () => { if (S.voz.activa) detenerVoz(); else iniciarVoz(); });
@@ -1017,13 +1066,13 @@ function enviarTexto() {
   if (!t) return;
   $("vozTexto").textContent = t; $("vozTexto").className = "";
   $("txtOrden").value = "";
-  ejecutarOrdenVoz(t);
+  ejecutarSeguro(t);
 }
 $("btnOrden").addEventListener("click", enviarTexto);
 $("txtOrden").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); enviarTexto(); } });
 document.querySelectorAll("#chipsVoz button").forEach((b) => b.addEventListener("click", () => {
   $("vozTexto").textContent = b.textContent; $("vozTexto").className = "";
-  ejecutarOrdenVoz(b.textContent);
+  ejecutarSeguro(b.textContent);
 }));
 if (window.isSecureContext === false) vozEstado("La voz solo funciona en páginas HTTPS.");
 else if (!vozSoportada()) { $("ayudaVoz").textContent = "Este navegador no admite reconocimiento de voz (usa Chrome o Safari). Puedes escribir o dictar la orden abajo."; vozEstado("Reconocimiento de voz no disponible en este navegador."); }
