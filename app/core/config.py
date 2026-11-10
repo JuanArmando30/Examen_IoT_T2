@@ -13,6 +13,27 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 LONGITUD_MINIMA_CLAVE_API = 12
 
+# Origen del frontend publicado en GitHub Pages (solo esquema + dominio, sin ruta).
+ORIGEN_CORS_POR_DEFECTO = "https://juanarmando30.github.io"
+
+
+def origenes_cors():
+    """Orígenes autorizados para llamar a la API desde el navegador (CORS).
+
+    Se leen de CORS_ORIGINS (separados por comas). CORS no autentica a nadie:
+    solo indica al navegador qué páginas pueden leer las respuestas. La
+    protección de escrituras sigue siendo la cabecera X-API-Key.
+    """
+
+    valor = os.getenv("CORS_ORIGINS", ORIGEN_CORS_POR_DEFECTO)
+    origenes = [o.strip().rstrip("/") for o in valor.split(",") if o.strip()]
+
+    for origen in origenes:
+        if origen == "*" or not origen.startswith(("https://", "http://localhost", "http://127.0.0.1")):
+            raise ValueError(f"Origen CORS no permitido: {origen!r}")
+
+    return origenes
+
 
 @dataclass(frozen=True)
 class Settings:

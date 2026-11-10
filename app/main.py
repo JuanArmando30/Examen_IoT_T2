@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.documentacion import ETIQUETAS
@@ -9,6 +10,7 @@ from app.api.routes import (
     comandos, control, demos, estado, historial, movimientos, sistema, vehiculos, ws,
 )
 from app.contenedor import Contenedor
+from app.core.config import origenes_cors
 from app.core.exceptions import ErrorAplicacion
 
 logging.basicConfig(
@@ -56,6 +58,18 @@ app = FastAPI(
     version="1.0.0",
     openapi_tags=ETIQUETAS,
     lifespan=lifespan,
+)
+
+# CORS para el frontend en GitHub Pages. Solo los métodos y cabeceras que
+# usa el cliente; sin cookies (allow_credentials=False). No afecta al
+# WebSocket ni sustituye a la autenticación por X-API-Key.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origenes_cors(),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key"],
+    allow_credentials=False,
+    max_age=600,
 )
 
 
