@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, Path, Request
 from fastapi.security import APIKeyHeader
 
 from app.contenedor import Contenedor
-from app.core.security import ROL_ADMIN, identificar_rol
+from app.core.security import ROL_ADMIN, ROL_OPERADOR, identificar_rol
 
 esquema_api_key = APIKeyHeader(
     name="X-API-Key",
@@ -62,7 +62,28 @@ def requiere_admin(rol: RolDep) -> str:
     return rol
 
 
+def requiere_control(
+    contenedor: ContenedorDep,
+    clave: Annotated[Optional[str], Depends(esquema_api_key)],
+) -> str:
+    """Operaciones de CONTROL (mover, DEMO, /sesion).
+
+    - Con clave: debe ser válida (401 si no lo es), igual que siempre.
+    - Sin clave: se acepta como operador SOLO si CONTROL_ABIERTO=true.
+    Crear, editar y eliminar NO usan esta dependencia.
+    """
+
+    if clave:
+        return requiere_operador(identificar_rol(clave, contenedor.seguridad))
+
+    if contenedor.seguridad.control_abierto:
+        return ROL_OPERADOR
+
+    return requiere_operador(None)
+
+
 Operador = Annotated[str, Depends(requiere_operador)]
+Control = Annotated[str, Depends(requiere_control)]
 Administrador = Annotated[str, Depends(requiere_admin)]
 
 IdVehiculo = Annotated[

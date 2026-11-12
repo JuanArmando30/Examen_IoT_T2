@@ -25,6 +25,9 @@ API local para gestionar un **vehículo IoT** (FastAPI + Amazon RDS).
 * **GET** consultan; **POST** escriben, actualizan y ejecutan acciones.
 * Las operaciones de escritura y control exigen la cabecera `X-API-Key`
   (botón **Authorize**). Eliminar exige la clave de administrador.
+* Con `CONTROL_ABIERTO=true` (en `.env`), **solo** mover, iniciar/cancelar
+  DEMO y `GET /sesion` se aceptan sin clave; crear, editar y eliminar la
+  siguen exigiendo.
 * **Movimiento individual**: actualiza `estado_vehiculo` **y** guarda en
   `historial_comandos`.
 * **DEMO**: se transmite por WebSocket y **no** se guarda en el historial.

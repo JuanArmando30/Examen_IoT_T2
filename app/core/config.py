@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 
 LONGITUD_MINIMA_CLAVE_API = 12
+VERDADERO = {"1", "true", "si", "sí", "yes", "on"}
 
 # Origen del frontend publicado en GitHub Pages (solo esquema + dominio, sin ruta).
 ORIGEN_CORS_POR_DEFECTO = "https://juanarmando30.github.io"
@@ -96,10 +97,16 @@ class SeguridadSettings:
 
     - API_KEY_OPERADOR: permite operaciones de escritura y control.
     - API_KEY_ADMIN: además permite operaciones destructivas (eliminar).
+    - CONTROL_ABIERTO (opcional, por defecto false): si es true, las
+      operaciones de CONTROL (mover, iniciar/cancelar DEMO y GET /sesion)
+      se aceptan SIN clave. Crear, editar y eliminar siguen exigiendo la
+      clave de operador o de administrador. Una clave incorrecta sigue
+      respondiendo 401.
     """
 
     api_key_operador: str = field(repr=False)
     api_key_admin: str = field(repr=False)
+    control_abierto: bool = False
 
     @classmethod
     def from_env(cls):
@@ -136,4 +143,10 @@ class SeguridadSettings:
                 "API_KEY_OPERADOR y API_KEY_ADMIN deben ser distintas."
             )
 
-        return cls(api_key_operador=operador, api_key_admin=admin)
+        control_abierto = os.getenv("CONTROL_ABIERTO", "false").strip().lower() in VERDADERO
+
+        return cls(
+            api_key_operador=operador,
+            api_key_admin=admin,
+            control_abierto=control_abierto,
+        )

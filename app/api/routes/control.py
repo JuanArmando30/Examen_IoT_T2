@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.api.dependencies import Operador
+from app.api.dependencies import Control, ContenedorDep
 from app.api.documentacion import R401, TAG_SISTEMA
 
 router = APIRouter()
@@ -24,6 +24,8 @@ CABECERAS = {
 
 class SesionOut(BaseModel):
     rol: str
+    # "clave": se validó una X-API-Key · "abierto": sin clave, con CONTROL_ABIERTO=true
+    acceso: str = "clave"
 
 
 @router.get("/control", include_in_schema=False)
@@ -41,10 +43,13 @@ def panel_de_control():
     response_model=SesionOut,
     responses=R401,
 )
-def verificar_sesion(rol: Operador):
+def verificar_sesion(rol: Control, contenedor: ContenedorDep, request: Request):
     """Comprueba la clave **sin modificar datos**.
 
-    Devuelve el rol (`operador` o `admin`). Responde 401 si la cabecera
-    `X-API-Key` falta o es incorrecta. La usa el panel `/control`.
+    Devuelve el rol (`operador` o `admin`) y cómo se obtuvo el acceso.
+    Responde 401 si la cabecera `X-API-Key` es incorrecta, o si falta y
+    `CONTROL_ABIERTO` no está activo. Sin clave y con `CONTROL_ABIERTO=true`
+    responde `{"rol": "operador", "acceso": "abierto"}`.
     """
-    return {"rol": rol}
+    abierto = not request.headers.get("X-API-Key") and contenedor.seguridad.control_abierto
+    return {"rol": rol, "acceso": "abierto" if abierto else "clave"}

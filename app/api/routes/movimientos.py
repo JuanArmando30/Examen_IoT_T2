@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter
 
-from app.api.dependencies import ContenedorDep, IdVehiculo, Operador
+from app.api.dependencies import Control, ContenedorDep, IdVehiculo
 from app.api.documentacion import ESCRITURA, TAG_MOVIMIENTOS
 from app.core.exceptions import ConflictoNegocio
 from app.models.schemas import MovimientoRegistradoOut, MovimientoSolicitud
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/vehiculos/{id_vehiculo}/movimientos",
 )
 async def registrar_movimiento(
     id_vehiculo: IdVehiculo, cuerpo: MovimientoSolicitud,
-    contenedor: ContenedorDep, _rol: Operador,
+    contenedor: ContenedorDep, _rol: Control,
 ):
     """Flujo: validar -> `sp_actualizar_estado` + `sp_registrar_historial`
     en **una transacción** -> COMMIT en RDS -> notificación WebSocket.
@@ -30,7 +30,7 @@ async def registrar_movimiento(
     no existe/está inactivo, si el comando no existe, está inactivo o es de
     otro vehículo, o si hay una DEMO en ejecución.
 
-    Requiere cabecera `X-API-Key`. Ejecutar un movimiento NO crea comandos
+    Requiere cabecera `X-API-Key`, salvo con `CONTROL_ABIERTO=true`. Ejecutar un movimiento NO crea comandos
     nuevos (para eso: `POST /vehiculos/{id}/comandos`).
 
     **Stored Procedures:** `sp_obtener_vehiculo`,

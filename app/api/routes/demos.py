@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter
 
 from app.api.dependencies import (
-    Administrador, ContenedorDep, IdDemo, IdMovimiento, IdVehiculo, Operador,
+    Administrador, ContenedorDep, Control, IdDemo, IdMovimiento, IdVehiculo, Operador,
 )
 from app.api.documentacion import (
     BORRADO, ESCRITURA, LECTURA, TAG_DEMO, TAG_MOV_DEMO,
@@ -68,7 +68,7 @@ def estado_ejecucion(id_vehiculo: IdVehiculo, contenedor: ContenedorDep):
     response_model=DemoCanceladaOut, responses=ESCRITURA,
 )
 async def cancelar_demo(
-    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _rol: Operador,
+    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _rol: Control,
 ):
     """Suspende **inmediatamente** la emisión de movimientos posteriores,
     deja el estado en `DETENER` (si el vehículo tiene ese comando) y
@@ -124,7 +124,7 @@ def eliminar_demo(
 )
 async def iniciar_demo(
     id_vehiculo: IdVehiculo, id_demo: IdDemo,
-    contenedor: ContenedorDep, _rol: Operador,
+    contenedor: ContenedorDep, _rol: Control,
 ):
     """Responde **202 Accepted** de inmediato; la secuencia corre en segundo
     plano y se transmite por `ws://localhost:8000/ws/vehiculos/{id_vehiculo}`:

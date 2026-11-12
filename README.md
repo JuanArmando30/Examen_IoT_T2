@@ -43,14 +43,31 @@ python -m venv .venv
 powershell -ExecutionPolicy Bypass -File .\deploy\windows\registrar_tareas.ps1
 ```
 
-### Actualizar el servidor después de un cambio
+### Actualizar el servidor después de un cambio (sin copiar archivos)
+
+1. En tu PC: `git push` de los cambios a GitHub.
+2. En el servidor (escritorio remoto → PowerShell **como Administrador**):
 
 ```powershell
-cd C:\vehiculo_oit
-Stop-ScheduledTask VehiculoAPI
-Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
-git pull
-Start-ScheduledTask VehiculoAPI
+powershell -ExecutionPolicy Bypass -File C:\vehiculo_oit\deploy\actualizar_servidor.ps1
+```
+
+El script descarga la última versión de `main`, reinstala dependencias solo si cambió `requirements.txt`, reinicia la tarea `VehiculoAPI` y comprueba `/health`, `/health/db` y `/sesion`. No toca `.env`, `.venv` ni los registros. La primera vez, si la carpeta no era un repositorio git, hace un respaldo (`C:\vehiculo_oit_respaldo_<fecha>`) y la conecta a GitHub. Necesita Git instalado en el servidor (https://git-scm.com/download/win).
+
+**Primera vez** (el script aún no está en el servidor): descárgalo y ejecútalo directamente:
+
+```powershell
+irm https://raw.githubusercontent.com/JuanArmando30/Examen_IoT_T2/main/deploy/actualizar_servidor.ps1 -OutFile $env:TEMP\actualizar_servidor.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\actualizar_servidor.ps1
+```
+
+### Control sin clave (`CONTROL_ABIERTO`)
+
+Con `CONTROL_ABIERTO=true` en `.env`, **solo** mover (`POST …/movimientos`), iniciar/cancelar DEMO y `GET /sesion` se aceptan sin `X-API-Key`. Crear y editar siguen exigiendo la clave de operador; eliminar, la de administrador; una clave incorrecta sigue dando 401. Se cambia con el mismo script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\vehiculo_oit\deploy\actualizar_servidor.ps1 -ControlAbierto si   # abrir
+powershell -ExecutionPolicy Bypass -File C:\vehiculo_oit\deploy\actualizar_servidor.ps1 -ControlAbierto no   # cerrar
 ```
 
 ### Probar por HTTPS/WSS
