@@ -7,3 +7,5 @@ __pycache__/
 .pytest_cache/
 .vscode/
 *.log
+# Exportaciones de diagnóstico de RDS (solo en el servidor)
+diagnostico/
