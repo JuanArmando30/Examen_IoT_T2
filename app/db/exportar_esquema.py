@@ -16,7 +16,6 @@ Genera diagnostico\\esquema_rds_<fecha>.md (la carpeta está en .gitignore).
 
 import sys
 from datetime import datetime
-from pathlib import Path
 
 import mysql.connector
 
