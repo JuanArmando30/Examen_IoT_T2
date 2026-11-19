@@ -4,8 +4,9 @@ from app.core.exceptions import ConflictoNegocio, RecursoNoEncontrado
 class VehiculoService:
     """Reglas de negocio de los vehículos."""
 
-    def __init__(self, repositorio):
+    def __init__(self, repositorio, esquema=None):
         self.repositorio = repositorio
+        self.esquema = esquema
 
     def listar(self):
         return self.repositorio.obtener_vehiculos()
@@ -63,4 +64,12 @@ class VehiculoService:
 
     def eliminar(self, id_vehiculo):
         self.obtener_o_fallar(id_vehiculo)
+        # Con V009: una unidad con movimientos se da de baja, no se borra
+        # (borrarla eliminaría su historial en cascada; hallazgo H13).
+        if (self.esquema is not None and self.esquema.tiene_administracion()
+                and self.repositorio.obtener_historial_reciente(id_vehiculo, 1)):
+            raise ConflictoNegocio(
+                "La unidad tiene movimientos en el historial: dala de baja "
+                "(POST /admin/unidades/{id}/baja) para conservarlos."
+            )
         self.repositorio.eliminar_vehiculo(id_vehiculo)

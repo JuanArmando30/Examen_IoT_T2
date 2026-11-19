@@ -1,18 +1,21 @@
-"""Comprueba que los 21 SP existen en RDS.
+"""Comprueba que los procedimientos almacenados existen en RDS.
 
 Uso:  python -m app.db.verificar_procedimientos
+Los 21 originales son obligatorios; los 25 de ADMINISTRACIÓN (V009) se
+informan aparte (faltan mientras no se aplique esa migración).
 """
 
 import sys
 
-from app.db.database import Database
+from app.db.migrar import base_administrativa
 from app.repositories.stored_procedure_repository import (
-    PROCEDIMIENTOS_PERMITIDOS,
+    PROCEDIMIENTOS_NUEVOS,
+    PROCEDIMIENTOS_ORIGINALES,
 )
 
 
 def main():
-    db = Database()
+    db = base_administrativa()
 
     with db.connection() as conexion:
         cursor = conexion.cursor()
@@ -27,16 +30,18 @@ def main():
         finally:
             cursor.close()
 
-    faltantes = sorted(PROCEDIMIENTOS_PERMITIDOS - existentes)
+    faltan = sorted(PROCEDIMIENTOS_ORIGINALES - existentes)
+    nuevos = len(PROCEDIMIENTOS_NUEVOS & existentes)
 
-    print(f"Procedimientos esperados: {len(PROCEDIMIENTOS_PERMITIDOS)}")
-    print(f"Encontrados: {len(PROCEDIMIENTOS_PERMITIDOS & existentes)}")
+    print(f"Originales: {len(PROCEDIMIENTOS_ORIGINALES & existentes)} de {len(PROCEDIMIENTOS_ORIGINALES)}")
+    print(f"Administración (V009): {nuevos} de {len(PROCEDIMIENTOS_NUEVOS)}")
 
-    if faltantes:
-        print("FALTAN:", ", ".join(faltantes))
+    if faltan:
+        print("FALTAN:", ", ".join(faltan))
         sys.exit(1)
 
-    print("OK: los 21 procedimientos almacenados existen.")
+    print("OK: los 21 procedimientos originales existen."
+          + ("" if nuevos == len(PROCEDIMIENTOS_NUEVOS) else " Falta aplicar V009."))
 
 
 if __name__ == "__main__":

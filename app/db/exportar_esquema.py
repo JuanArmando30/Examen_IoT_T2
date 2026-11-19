@@ -20,7 +20,7 @@ from datetime import datetime
 import mysql.connector
 
 from app.core.config import PROJECT_ROOT
-from app.db.database import Database
+from app.db.migrar import base_administrativa
 from app.repositories.stored_procedure_repository import (
     PROCEDIMIENTOS_PERMITIDOS,
 )
@@ -255,7 +255,7 @@ class Exportador:
 
 
 def main():
-    db = Database()
+    db = base_administrativa()        # DB_MIGRA_USER si existe: la cuenta de la API no puede leer la estructura
     with db.connection() as conexion:
         cursor = conexion.cursor()
         cursor.execute("START TRANSACTION READ ONLY")      # garantía: nada puede modificarse

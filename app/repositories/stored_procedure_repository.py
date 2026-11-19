@@ -1,5 +1,6 @@
-"""Capa de acceso a los 21 procedimientos almacenados de vehiculo_iot.
+"""Capa de acceso a los procedimientos almacenados de vehiculo_iot.
 
+Los 21 originales (prácticas 2.3/2.4) y los 25 de ADMINISTRACIÓN (V009).
 Responsabilidad única: ejecutar SP con parámetros enlazados y devolver
 filas como diccionarios. Aquí NO hay reglas de negocio (eso vive en
 app/services) ni código HTTP.
@@ -14,13 +15,14 @@ from app.core.exceptions import (
     BaseDatosNoDisponible,
     ConflictoNegocio,
     ErrorBaseDatos,
+    EsquemaPendiente,
     SolicitudInvalida,
 )
 from app.db.database import Database
 
 logger = logging.getLogger(__name__)
 
-# --- Los 21 procedimientos, agrupados -------------------------------------
+# --- Los 21 procedimientos originales, agrupados ---------------------------
 
 PROCEDIMIENTOS_LECTURA = frozenset({
     "sp_obtener_vehiculos",
@@ -49,7 +51,44 @@ PROCEDIMIENTOS_ESCRITURA = frozenset({
     "sp_eliminar_movimiento_demo",
 })
 
-PROCEDIMIENTOS_PERMITIDOS = PROCEDIMIENTOS_LECTURA | PROCEDIMIENTOS_ESCRITURA
+PROCEDIMIENTOS_ORIGINALES = PROCEDIMIENTOS_LECTURA | PROCEDIMIENTOS_ESCRITURA
+
+# --- V009 · Administración -------------------------------------------------
+
+PROCEDIMIENTOS_V009_LECTURA = frozenset({
+    "sp_version_esquema",
+    "sp_obtener_historial_reciente",
+    "sp_listar_auditoria",
+    "sp_metricas_admin",
+    "sp_listar_modelos",
+    "sp_obtener_modelo",
+    "sp_listar_capacidades",
+    "sp_listar_unidades",
+    "sp_obtener_unidad",
+    "sp_listar_usuarios",
+    "sp_obtener_usuario",
+    "sp_listar_asignaciones",
+    "sp_mis_vehiculos",
+})
+
+PROCEDIMIENTOS_V009_ESCRITURA = frozenset({
+    "sp_registrar_auditoria",
+    "sp_crear_modelo",
+    "sp_actualizar_modelo",
+    "sp_guardar_capacidad",
+    "sp_eliminar_capacidad",
+    "sp_crear_unidad",
+    "sp_actualizar_unidad",
+    "sp_baja_unidad",
+    "sp_crear_usuario",
+    "sp_actualizar_usuario",
+    "sp_asignar_unidad",
+    "sp_finalizar_asignacion",
+})
+
+PROCEDIMIENTOS_NUEVOS = PROCEDIMIENTOS_V009_LECTURA | PROCEDIMIENTOS_V009_ESCRITURA
+_ESCRITURA = PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA
+PROCEDIMIENTOS_PERMITIDOS = PROCEDIMIENTOS_ORIGINALES | PROCEDIMIENTOS_NUEVOS
 
 # Errores de MySQL que significan "no hay conexión / sin acceso".
 _ERRNO_SIN_SERVICIO = {
@@ -96,6 +135,21 @@ def traducir_error_mysql(error):
             "Alguno de los valores enviados excede el tamaño o el rango "
             "permitido."
         )
+
+    if errno == 1644:
+        # SIGNAL SQLSTATE '45000' de los SP de V009: el mensaje lo escribimos
+        # nosotros (regla de negocio) y no contiene datos sensibles.
+        return ConflictoNegocio(getattr(error, "msg", None) or None)
+
+    if errno == 3819:
+        return SolicitudInvalida(
+            "Algún valor no cumple las reglas de la base de datos "
+            "(límites o valores permitidos)."
+        )
+
+    if errno == 1305:
+        # Procedimiento inexistente: la base aún no tiene esa migración.
+        return EsquemaPendiente()
 
     if errno in _ERRNO_SIN_SERVICIO or isinstance(
         error, (mysql.connector.InterfaceError, OSError)
@@ -275,6 +329,140 @@ class _ProcedimientosSP:
     def eliminar_movimiento_demo(self, id_demo_movimiento):
         self._llamar("sp_eliminar_movimiento_demo", (id_demo_movimiento,))
 
+    # ================= V009 · ADMINISTRACIÓN =================
+
+    def version_esquema(self):
+        """Versión de la base (0 si aún no se aplicó V009)."""
+        registros = self._llamar("sp_version_esquema")
+        return int(registros[0]["version"]) if registros else 0
+
+    def obtener_historial_reciente(self, id_vehiculo, limite):
+        return self._llamar("sp_obtener_historial_reciente", (id_vehiculo, limite))
+
+    # ---------------- Auditoría y métricas ----------------
+
+    def registrar_auditoria(self, id_usuario, rol_actor, accion, recurso_tipo,
+                            recurso_id, resultado, detalle_json, red_hash):
+        self._llamar("sp_registrar_auditoria", (
+            id_usuario, rol_actor, accion, recurso_tipo, recurso_id,
+            resultado, detalle_json, red_hash,
+        ))
+
+    def listar_auditoria(self, accion, id_usuario, recurso_tipo, recurso_id,
+                         desde, hasta, limite, desplazamiento):
+        return self._llamar("sp_listar_auditoria", (
+            accion, id_usuario, recurso_tipo, recurso_id, desde, hasta,
+            limite, desplazamiento,
+        ))
+
+    def metricas_admin(self):
+        registros = self._llamar("sp_metricas_admin")
+        return registros[0] if registros else {}
+
+    # ---------------- Modelos y capacidades ----------------
+
+    def listar_modelos(self):
+        return self._llamar("sp_listar_modelos")
+
+    def obtener_modelo(self, id_modelo):
+        registros = self._llamar("sp_obtener_modelo", (id_modelo,))
+        return registros[0] if registros else None
+
+    def crear_modelo(self, nombre, descripcion, microcontrolador,
+                     max_movimiento_ms, max_paso_ms, max_pasos_demo, max_demo_ms):
+        registros = self._llamar("sp_crear_modelo", (
+            nombre, descripcion, microcontrolador, max_movimiento_ms,
+            max_paso_ms, max_pasos_demo, max_demo_ms,
+        ))
+        return _id_creado(registros, "id_modelo")
+
+    def actualizar_modelo(self, id_modelo, nombre, descripcion, microcontrolador,
+                          max_movimiento_ms, max_paso_ms, max_pasos_demo,
+                          max_demo_ms, activo):
+        self._llamar("sp_actualizar_modelo", (
+            id_modelo, nombre, descripcion, microcontrolador, max_movimiento_ms,
+            max_paso_ms, max_pasos_demo, max_demo_ms, activo,
+        ))
+
+    def listar_capacidades(self, id_modelo):
+        return self._llamar("sp_listar_capacidades", (id_modelo,))
+
+    def guardar_capacidad(self, id_modelo, nombre, codigo, descripcion, tipo,
+                          permitido_invitado):
+        self._llamar("sp_guardar_capacidad", (
+            id_modelo, nombre, codigo, descripcion, tipo, permitido_invitado,
+        ))
+
+    def eliminar_capacidad(self, id_modelo, codigo):
+        self._llamar("sp_eliminar_capacidad", (id_modelo, codigo))
+
+    # ---------------- Unidades ----------------
+
+    def listar_unidades(self, estado, id_modelo, texto, limite, desplazamiento):
+        return self._llamar("sp_listar_unidades", (
+            estado, id_modelo, texto, limite, desplazamiento,
+        ))
+
+    def obtener_unidad(self, id_vehiculo):
+        registros = self._llamar("sp_obtener_unidad", (id_vehiculo,))
+        return registros[0] if registros else None
+
+    def crear_unidad(self, id_modelo, nombre, numero_serie, descripcion, estado,
+                     es_simulada):
+        registros = self._llamar("sp_crear_unidad", (
+            id_modelo, nombre, numero_serie, descripcion, estado, es_simulada,
+        ))
+        return _id_creado(registros, "id_vehiculo")
+
+    def actualizar_unidad(self, id_vehiculo, nombre, numero_serie, descripcion,
+                          estado, activo):
+        self._llamar("sp_actualizar_unidad", (
+            id_vehiculo, nombre, numero_serie, descripcion, estado, activo,
+        ))
+
+    def baja_unidad(self, id_vehiculo):
+        self._llamar("sp_baja_unidad", (id_vehiculo,))
+
+    # ---------------- Usuarios ----------------
+
+    def listar_usuarios(self, rol, activo, texto, limite, desplazamiento):
+        return self._llamar("sp_listar_usuarios", (
+            rol, activo, texto, limite, desplazamiento,
+        ))
+
+    def obtener_usuario(self, id_usuario):
+        registros = self._llamar("sp_obtener_usuario", (id_usuario,))
+        return registros[0] if registros else None
+
+    def crear_usuario(self, correo, nombre, rol):
+        registros = self._llamar("sp_crear_usuario", (correo, nombre, rol))
+        return _id_creado(registros, "id_usuario")
+
+    def actualizar_usuario(self, id_usuario, nombre, rol, activo):
+        self._llamar("sp_actualizar_usuario", (id_usuario, nombre, rol, activo))
+
+    # ---------------- Asignaciones ----------------
+
+    def listar_asignaciones(self, id_vehiculo, id_usuario, solo_vigentes,
+                            limite, desplazamiento):
+        return self._llamar("sp_listar_asignaciones", (
+            id_vehiculo, id_usuario, solo_vigentes, limite, desplazamiento,
+        ))
+
+    def asignar_unidad(self, id_vehiculo, id_usuario, asignado_por):
+        registros = self._llamar("sp_asignar_unidad", (
+            id_vehiculo, id_usuario, asignado_por,
+        ))
+        return _id_creado(registros, "id_asignacion")
+
+    def finalizar_asignacion(self, id_asignacion, motivo, estado_resultante):
+        self._llamar("sp_finalizar_asignacion", (
+            id_asignacion, motivo, estado_resultante,
+        ))
+
+    def mis_vehiculos(self, id_usuario):
+        return self._llamar("sp_mis_vehiculos", (id_usuario,))
+
 
 class TransaccionSP(_ProcedimientosSP):
     """Ejecuta varios SP sobre UNA misma conexión/transacción."""
@@ -303,7 +491,7 @@ class StoredProcedureRepository(_ProcedimientosSP):
                 )
 
                 # Las consultas (GET) nunca hacen commit: no modifican datos.
-                if nombre in PROCEDIMIENTOS_ESCRITURA:
+                if nombre in _ESCRITURA:
                     conexion.commit()
 
                 return registros

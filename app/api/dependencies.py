@@ -7,6 +7,7 @@ from fastapi.security import APIKeyHeader
 
 from app.contenedor import Contenedor
 from app.core.security import ROL_ADMIN, ROL_OPERADOR, identificar_rol
+from app.services.administracion import Actor
 
 esquema_api_key = APIKeyHeader(
     name="X-API-Key",
@@ -85,6 +86,30 @@ def requiere_control(
 Operador = Annotated[str, Depends(requiere_operador)]
 Control = Annotated[str, Depends(requiere_control)]
 Administrador = Annotated[str, Depends(requiere_admin)]
+
+
+def actor_administrador(_rol: Administrador) -> Actor:
+    """Quién hace una operación de ADMINISTRACIÓN.
+
+    Etapa 3 (transición): el administrador se identifica con la clave
+    X-API-Key de administrador y aún no hay cuenta de usuario
+    (id_usuario = None en la auditoría y en asignado_por).
+    Etapa 4: esta función devolverá el usuario del token de acceso, sin
+    cambiar las rutas.
+    """
+    return Actor(id_usuario=None, rol=ROL_ADMIN, via="clave")
+
+
+ActorAdmin = Annotated[Actor, Depends(actor_administrador)]
+IdModelo = Annotated[
+    int, Path(gt=0, description="Identificador del modelo", examples=[1])
+]
+IdUsuario = Annotated[
+    int, Path(gt=0, description="Identificador del usuario", examples=[1])
+]
+IdAsignacion = Annotated[
+    int, Path(gt=0, description="Identificador de la asignación", examples=[1])
+]
 
 IdVehiculo = Annotated[
     int, Path(gt=0, description="Identificador del vehículo", examples=[1])

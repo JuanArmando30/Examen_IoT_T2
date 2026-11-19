@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.documentacion import ETIQUETAS
 from app.api.routes import (
-    comandos, control, demos, estado, historial, movimientos, sistema, vehiculos, ws,
+    admin, comandos, control, demos, estado, historial, movimientos, sistema, vehiculos, ws,
 )
 from app.contenedor import Contenedor
 from app.core.config import origenes_cors
@@ -31,76 +31,83 @@ API local para gestionar un **vehículo IoT** (FastAPI + Amazon RDS).
 * **Movimiento individual**: actualiza `estado_vehiculo` **y** guarda en
   `historial_comandos`.
 * **DEMO**: se transmite por WebSocket y **no** se guarda en el historial.
+* **Administración** (`/admin`): modelos, unidades, clientes, asignaciones,
+  auditoría y métricas. Requiere la migración V009 en la base.
 * WebSocket (no aparece aquí): `ws://localhost:8000/ws/vehiculos/{id}`
   — ver README.
 """
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.contenedor = Contenedor()
+def crear_app(fabrica_contenedor=Contenedor):
+    """Construye la aplicación. Las pruebas pasan una fábrica con un repositorio falso."""
 
-    try:
-        app.state.contenedor.verificar_base_datos()
-        logger.info("Conexión a RDS verificada.")
-    except Exception as error:
-        # La API arranca igualmente; /health/db mostrará el problema.
-        logger.warning(
-            "No se pudo verificar RDS al arrancar (%s).",
-            error.__class__.__name__,
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.contenedor = fabrica_contenedor()
+
+        try:
+            app.state.contenedor.verificar_base_datos()
+            logger.info("Conexión a RDS verificada · versión del esquema: %s",
+                        app.state.contenedor.esquema.version())
+        except Exception as error:
+            # La API arranca igualmente; /health/db mostrará el problema.
+            logger.warning(
+                "No se pudo verificar RDS al arrancar (%s).",
+                error.__class__.__name__,
+            )
+
+        yield
+
+        await app.state.contenedor.demo_ejecutor.cerrar()
+
+    app = FastAPI(
+        title="API Vehículo IoT",
+        description=DESCRIPCION,
+        version="1.1.0",
+        openapi_tags=ETIQUETAS,
+        lifespan=lifespan,
+    )
+
+    # CORS para el frontend en GitHub Pages. Solo los métodos y cabeceras que
+    # usa el cliente; sin cookies (allow_credentials=False). No afecta al
+    # WebSocket ni sustituye a la autenticación por X-API-Key.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origenes_cors(),
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "X-API-Key"],
+        allow_credentials=False,
+        max_age=600,
+    )
+
+    @app.exception_handler(ErrorAplicacion)
+    async def manejar_error_aplicacion(request: Request, error: ErrorAplicacion):
+        if error.codigo_http >= 500:
+            logger.error("%s %s -> %s", request.method, request.url.path,
+                         error.codigo_http)
+
+        return JSONResponse(
+            status_code=error.codigo_http,
+            content={"detail": error.mensaje},
         )
 
-    yield
+    @app.exception_handler(Exception)
+    async def manejar_error_inesperado(request: Request, error: Exception):
+        # El detalle va al log local; el cliente solo ve un mensaje genérico.
+        logger.error(
+            "Error no controlado en %s %s", request.method, request.url.path,
+            exc_info=error,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Error interno del servidor."},
+        )
 
-    await app.state.contenedor.demo_ejecutor.cerrar()
+    for modulo in (sistema, vehiculos, comandos, estado, historial,
+                   movimientos, demos, control, admin, ws):
+        app.include_router(modulo.router)
 
-
-app = FastAPI(
-    title="API Vehículo IoT",
-    description=DESCRIPCION,
-    version="1.0.0",
-    openapi_tags=ETIQUETAS,
-    lifespan=lifespan,
-)
-
-# CORS para el frontend en GitHub Pages. Solo los métodos y cabeceras que
-# usa el cliente; sin cookies (allow_credentials=False). No afecta al
-# WebSocket ni sustituye a la autenticación por X-API-Key.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origenes_cors(),
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-API-Key"],
-    allow_credentials=False,
-    max_age=600,
-)
+    return app
 
 
-@app.exception_handler(ErrorAplicacion)
-async def manejar_error_aplicacion(request: Request, error: ErrorAplicacion):
-    if error.codigo_http >= 500:
-        logger.error("%s %s -> %s", request.method, request.url.path,
-                     error.codigo_http)
-
-    return JSONResponse(
-        status_code=error.codigo_http,
-        content={"detail": error.mensaje},
-    )
-
-
-@app.exception_handler(Exception)
-async def manejar_error_inesperado(request: Request, error: Exception):
-    # El detalle va al log local; el cliente solo ve un mensaje genérico.
-    logger.error(
-        "Error no controlado en %s %s", request.method, request.url.path,
-        exc_info=error,
-    )
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Error interno del servidor."},
-    )
-
-
-for modulo in (sistema, vehiculos, comandos, estado, historial,
-               movimientos, demos, control, ws):
-    app.include_router(modulo.router)
+app = crear_app()

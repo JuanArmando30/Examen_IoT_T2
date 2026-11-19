@@ -28,9 +28,12 @@ archivos de reversión que solo actúan sobre lo que existe (directivas @si).
 """
 
 import argparse
+import dataclasses
 import hashlib
 import json
+import os
 import re
+import secrets
 import sys
 import time
 from dataclasses import dataclass, field
@@ -41,7 +44,8 @@ import mysql.connector
 
 from app.core.config import PROJECT_ROOT
 from app.db.database import Database
-from app.repositories.stored_procedure_repository import PROCEDIMIENTOS_PERMITIDOS
+from app.db.pruebas_procedimientos import PRUEBAS
+from app.repositories.stored_procedure_repository import PROCEDIMIENTOS_ORIGINALES
 
 CARPETA_MIGRACIONES = PROJECT_ROOT / "db" / "migraciones"
 CARPETA_DIAGNOSTICO = PROJECT_ROOT / "diagnostico"
@@ -123,9 +127,15 @@ def analizar(ruta):
     sentencias, previos, verificaciones, pendientes = [], [], [], []
     actual, linea_inicio = [], None
     comilla, bloque = None, False
+    delimitador = ";"                    # se cambia con «DELIMITER $$» (para crear procedimientos), como en el cliente mysql
 
     for n, linea in enumerate(lineas, 1):
         limpia = linea.strip()
+        if limpia.upper().startswith("DELIMITER ") and not actual and not comilla and not bloque:
+            delimitador = limpia.split(None, 1)[1].strip()
+            if not delimitador or "'" in delimitador or '"' in delimitador:
+                raise ErrorMigracion(f"{ruta.name}:{n}: DELIMITER inválido")
+            continue
         if limpia.startswith("-- @"):
             if actual or comilla or bloque:
                 raise ErrorMigracion(f"{ruta.name}:{n}: directiva dentro de una sentencia")
@@ -178,7 +188,7 @@ def analizar(ruta):
                 trozo.append(c)
                 i += 1
                 continue
-            if c == ";":
+            if linea.startswith(delimitador, i):
                 actual.append("".join(trozo))
                 trozo = []
                 sql = "\n".join(actual).strip()
@@ -187,7 +197,7 @@ def analizar(ruta):
                 elif pendientes:
                     raise ErrorMigracion(f"{ruta.name}:{n}: condición @si sin sentencia")
                 pendientes, actual, linea_inicio = [], [], None
-                i += 1
+                i += len(delimitador)
                 continue
             trozo.append(c)
             i += 1
@@ -201,7 +211,9 @@ def analizar(ruta):
             actual.append("")
 
     if "\n".join(actual).strip():
-        raise ErrorMigracion(f"{ruta.name}: la última sentencia no termina en «;»")
+        raise ErrorMigracion(f"{ruta.name}: la última sentencia no termina en «{delimitador}»")
+    if delimitador != ";":
+        raise ErrorMigracion(f"{ruta.name}: falta «DELIMITER ;» al final")
     if comilla or bloque:
         raise ErrorMigracion(f"{ruta.name}: comilla o comentario sin cerrar")
     if pendientes:
@@ -561,8 +573,20 @@ class Ejecutor:
 
 # ============================ Comandos ============================
 
-def _conectar():
+def base_administrativa():
+    """Database con la cuenta de administración (DB_MIGRA_USER/DB_MIGRA_PASSWORD si existen en .env).
+
+    Así la API puede usar una cuenta con solo EXECUTE (DB_USER) y las migraciones otra con DDL.
+    """
     db = Database()
+    usuario, clave = os.getenv("DB_MIGRA_USER"), os.getenv("DB_MIGRA_PASSWORD")
+    if usuario and clave:
+        db.config = dataclasses.replace(db.config, db_user=usuario, db_password=clave)
+    return db
+
+
+def _conectar():
+    db = base_administrativa()
     conexion = db.get_connection()
     return db, conexion
 
@@ -575,6 +599,16 @@ def _diferencias(a, b):
             if x != y:
                 lineas.append(f"{tabla}.{parte}: antes={x} · después={y}")
     return lineas
+
+
+def _probar_versiones(ex, copia, versiones):
+    """Pruebas propias de cada versión (app/db/pruebas_procedimientos.py), solo en la copia."""
+    for m in versiones:
+        prueba = PRUEBAS.get(m.version)
+        if prueba:
+            ex._proteger(copia, produccion=False)
+            prueba(ex, copia)
+            ex.log(f"   ✓ pruebas de los procedimientos de {m.version}")
 
 
 def _guardar_informe(ex, nombre):
@@ -625,7 +659,7 @@ def cmd_probar(args):
                f"MySQL {ex.valor('SELECT VERSION()')}")
         ex.log("La base real solo se LEE durante esta prueba.")
         ex.log()
-        faltan = PROCEDIMIENTOS_PERMITIDOS - ex.procedimientos(real)
+        faltan = PROCEDIMIENTOS_ORIGINALES - ex.procedimientos(real)
         if faltan:
             raise ErrorMigracion(f"La base real no tiene los 21 SP: faltan {sorted(faltan)}")
         conteo_real = ex.conteos(real)
@@ -638,6 +672,7 @@ def cmd_probar(args):
         pendientes = [m for m in migraciones if m.version not in hechas]
         previas = sorted(ex.tablas(copia) - {TABLA_HISTORIAL, MARCA_COPIA})
         base_estructura = ex.estructura(copia, previas)
+        base_procedimientos = ex.procedimientos(copia)
         base_conteos = ex.conteos(copia)
         ex.log(f"   ✓ copia creada · {len(previas)} tablas · registros: {base_conteos}")
         ex.log(f"   · ya aplicadas en la base real: {sorted(hechas) or 'ninguna'} · por probar: "
@@ -650,9 +685,10 @@ def cmd_probar(args):
         for m in pendientes:
             ex.aplicar_up(copia, m, respaldo="prueba")
         ex.log()
-        ex.log("## 3. Compatibilidad con los 21 SP existentes")
+        ex.log("## 3. Compatibilidad con los 21 SP existentes y pruebas de los nuevos")
         ex.probar_lecturas(copia)
         ex.probar_escrituras(copia)
+        _probar_versiones(ex, copia, pendientes)
         ex.log()
         ex.log("## 4. Revertir lo aplicado (de la más nueva a la más antigua)")
         for m in reversed(pendientes):
@@ -665,14 +701,19 @@ def cmd_probar(args):
             raise ErrorMigracion(f"Quedaron tablas tras la reversión: {sorted(sobrantes)}")
         if ex.conteos(copia) != base_conteos:
             raise ErrorMigracion("La reversión cambió el número de registros")
+        if ex.procedimientos(copia) != base_procedimientos:
+            raise ErrorMigracion("La reversión no dejó los mismos procedimientos: "
+                                 f"sobran {sorted(ex.procedimientos(copia) - base_procedimientos)}, "
+                                 f"faltan {sorted(base_procedimientos - ex.procedimientos(copia))}")
         ex.log(f"   ✓ estructura de las {len(previas)} tablas previas idéntica a la inicial · registros iguales · "
-               "sin tablas sobrantes")
+               f"sin tablas sobrantes · mismos {len(base_procedimientos)} procedimientos")
         ex.log()
         ex.log("## 5. Volver a aplicar (la reversión deja la base lista para reintentar)")
         for m in pendientes:
             ex.aplicar_up(copia, m, respaldo="prueba")
         ex.probar_lecturas(copia)
         ex.probar_escrituras(copia)
+        _probar_versiones(ex, copia, pendientes)
         if ex.conteos(copia) != base_conteos:
             raise ErrorMigracion("La segunda aplicación cambió el número de registros")
         ex.log()
@@ -726,7 +767,7 @@ def cmd_aplicar(args):
         for m in pendientes:
             if sello.get("migraciones", {}).get(m.version) != m.checksum:
                 raise ErrorMigracion(f"{m.version} no es el archivo que pasó la prueba: vuelve a ejecutar `probar`.")
-        faltan = PROCEDIMIENTOS_PERMITIDOS - ex.procedimientos(real)
+        faltan = PROCEDIMIENTOS_ORIGINALES - ex.procedimientos(real)
         if faltan:
             raise ErrorMigracion(f"La base real no tiene los 21 SP: faltan {sorted(faltan)}")
         ex.log(f"# Aplicación en «{real}» · respaldo: {args.respaldo}")
@@ -788,6 +829,62 @@ def cmd_limpiar(_args):
         con.close()
 
 
+def cmd_crear_cuenta_api(args):
+    """Cuenta de la API con privilegios mínimos: solo EXECUTE (los SP son SQL SECURITY DEFINER)."""
+    if not re.fullmatch(r"[a-z_][a-z0-9_]{2,31}", args.usuario):
+        raise ErrorMigracion("Nombre de cuenta inválido (minúsculas, números y _).")
+    db, con = _conectar()
+    base = db.config.db_name
+    if args.usuario == db.config.db_user:
+        raise ErrorMigracion("Esa es la cuenta con la que te conectas ahora; elige otro nombre.")
+    clave = secrets.token_urlsafe(24) + "-Aa9"          # aleatoria; se muestra UNA vez y no se guarda
+    ex = Ejecutor(con, base)
+    try:
+        ex.preparar_sesion()
+        existe = ex.valor("SELECT COUNT(*) FROM mysql.user WHERE user = %s AND host = '%'", (args.usuario,))
+        if existe and not args.rotar:
+            raise ErrorMigracion(f"La cuenta {args.usuario} ya existe. Usa --rotar para cambiarle la contraseña.")
+        if existe:
+            ex.ejecutar(f"ALTER USER '{args.usuario}'@'%' IDENTIFIED BY %s", (clave,))
+        else:
+            ex.ejecutar(f"CREATE USER '{args.usuario}'@'%' IDENTIFIED BY %s", (clave,))
+        ex.ejecutar(f"GRANT EXECUTE ON {_id(base)}.* TO '{args.usuario}'@'%'")
+    finally:
+        con.close()
+
+    # Comprobación: la cuenta nueva ejecuta SP pero NO puede leer tablas directamente.
+    prueba = Database()
+    prueba.config = dataclasses.replace(db.config, db_user=args.usuario, db_password=clave)
+    c2 = prueba.get_connection()
+    try:
+        cursor = c2.cursor()
+        cursor.callproc("sp_obtener_vehiculos")
+        for r in cursor.stored_results():
+            r.fetchall()
+        cursor.close()
+        cursor = c2.cursor()
+        try:
+            cursor.execute("SELECT COUNT(*) FROM vehiculos")
+            cursor.fetchall()
+            raise ErrorMigracion("La cuenta nueva puede leer tablas directamente: revisa sus privilegios.")
+        except mysql.connector.Error as error:
+            if error.errno != 1142:                        # 1142 = SELECT denegado: es lo esperado
+                raise
+        finally:
+            cursor.close()
+    finally:
+        c2.close()
+
+    print(f"✓ Cuenta {args.usuario}: ejecuta los procedimientos y no puede leer tablas directamente.")
+    print("\nContraseña (se muestra solo esta vez):")
+    print(f"   {clave}")
+    print("\nEdita C:\\vehiculo_oit\\.env así y reinicia la API (Stop/Start-ScheduledTask VehiculoAPI):")
+    print(f"   DB_MIGRA_USER={db.config.db_user}        <- la cuenta administrativa actual (migraciones)")
+    print("   DB_MIGRA_PASSWORD=<la contraseña actual de DB_PASSWORD>")
+    print(f"   DB_USER={args.usuario}")
+    print("   DB_PASSWORD=<la contraseña de arriba>")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m app.db.migrar", description="Migraciones versionadas de RDS.")
     sub = p.add_subparsers(dest="comando", required=True)
@@ -807,6 +904,10 @@ def main(argv=None):
     rv.add_argument("--respaldo", default="")
     rv.set_defaults(f=cmd_revertir)
     sub.add_parser("limpiar-copia", help="borra la copia de prueba").set_defaults(f=cmd_limpiar)
+    cc = sub.add_parser("crear-cuenta-api", help="crea la cuenta de la API con solo EXECUTE (hallazgo H12)")
+    cc.add_argument("--usuario", default="vehiculo_api")
+    cc.add_argument("--rotar", action="store_true", help="si ya existe, le cambia la contraseña")
+    cc.set_defaults(f=cmd_crear_cuenta_api)
     args = p.parse_args(argv)
     for flujo in (sys.stdout, sys.stderr):          # la consola de Windows puede no tener ✓ ✗ →
         try:

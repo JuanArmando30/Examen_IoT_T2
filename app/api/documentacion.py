@@ -10,8 +10,14 @@ TAG_HISTORIAL = "Historial"
 TAG_MOVIMIENTOS = "Movimiento individual"
 TAG_DEMO = "DEMO"
 TAG_MOV_DEMO = "Movimientos de DEMO"
+TAG_ADMIN = "Administración"
 
 ETIQUETAS = [
+    {"name": TAG_ADMIN,
+     "description": "Inventario de la empresa: modelos y sus capacidades, unidades "
+                    "físicas, clientes, asignaciones, auditoría y métricas. Requiere la "
+                    "clave de administrador (Etapa 4: token de administrador). Responde "
+                    "503 si la base aún no tiene las migraciones V001–V009. SP de V009."},
     {"name": TAG_SISTEMA, "description": "Comprobación del servicio y de RDS."},
     {"name": TAG_VEHICULOS,
      "description": "CRUD de vehículos. SP: sp_crear_vehiculo, "
@@ -62,3 +68,7 @@ BASE = {**R500, **R503}
 LECTURA = {**R404, **BASE}
 ESCRITURA = {**R401, **R404, **R409, **R422, **R400, **BASE}
 BORRADO = {**R401, **R403, **R404, **R409, **BASE}
+R503_ADMIN = {503: _r("Amazon RDS no disponible, o la base aún no tiene las "
+                      "migraciones de Administración (V001–V009).")}
+ADMIN_LECTURA = {**R401, **R403, **R404, **R422, **R500, **R503_ADMIN}
+ADMIN_ESCRITURA = {**R400, **R401, **R403, **R404, **R409, **R422, **R500, **R503_ADMIN}

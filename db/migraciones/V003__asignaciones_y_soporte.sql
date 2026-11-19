@@ -26,7 +26,7 @@ CREATE TABLE asignaciones (
   id_asignacion    INT         NOT NULL AUTO_INCREMENT,
   id_vehiculo      INT         NOT NULL,
   id_usuario       INT         NOT NULL,
-  asignado_por     INT         NOT NULL,
+  asignado_por     INT         DEFAULT NULL,    -- NULL = con la clave de administrador (transición, hasta la Etapa 4)
   desde            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   hasta            DATETIME    DEFAULT NULL,
   motivo_fin       VARCHAR(30) DEFAULT NULL,

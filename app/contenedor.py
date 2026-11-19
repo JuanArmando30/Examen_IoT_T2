@@ -5,6 +5,15 @@ from app.db.database import Database
 from app.repositories.stored_procedure_repository import (
     StoredProcedureRepository,
 )
+from app.services.administracion import (
+    AsignacionService,
+    AuditoriaService,
+    EsquemaBD,
+    MetricasService,
+    ModeloService,
+    UnidadService,
+    UsuarioService,
+)
 from app.services.comando_service import ComandoService
 from app.services.demo_ejecutor import DemoEjecutor
 from app.services.demo_service import DemoService
@@ -22,13 +31,17 @@ class Contenedor:
         self.seguridad = seguridad or SeguridadSettings.from_env()
         self.repositorio = repositorio or StoredProcedureRepository(Database())
         self.gestor_ws = gestor or GestorConexiones()
+        # Versión de la base: activa las funciones de Administración cuando existe V009.
+        self.esquema = EsquemaBD(self.repositorio)
 
-        self.vehiculos = VehiculoService(self.repositorio)
+        self.vehiculos = VehiculoService(self.repositorio, self.esquema)
         self.comandos = ComandoService(self.repositorio, self.vehiculos)
         self.estados = EstadoService(
             self.repositorio, self.vehiculos, self.comandos
         )
-        self.historial = HistorialService(self.repositorio, self.vehiculos)
+        self.historial = HistorialService(
+            self.repositorio, self.vehiculos, self.esquema
+        )
         self.movimientos = MovimientoService(
             self.repositorio, self.vehiculos, self.comandos
         )
@@ -38,6 +51,20 @@ class Contenedor:
         self.demo_ejecutor = DemoEjecutor(
             self.demos, self.estados, self.comandos, self.gestor_ws
         )
+
+        # ---- Administración (Etapa 3) ----
+        self.auditoria = AuditoriaService(self.repositorio, self.esquema)
+        self.modelos = ModeloService(self.repositorio, self.esquema, self.auditoria)
+        self.unidades = UnidadService(
+            self.repositorio, self.esquema, self.auditoria, self.modelos,
+            self.demo_ejecutor,
+        )
+        self.usuarios = UsuarioService(self.repositorio, self.esquema, self.auditoria)
+        self.asignaciones = AsignacionService(
+            self.repositorio, self.esquema, self.auditoria, self.unidades,
+            self.usuarios, self.demo_ejecutor,
+        )
+        self.metricas = MetricasService(self.repositorio, self.esquema)
 
     def verificar_base_datos(self):
         return self.repositorio.verificar()

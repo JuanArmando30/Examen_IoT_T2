@@ -81,7 +81,7 @@ CREATE TABLE codigos_restablecimiento (
   id_codigo   INT               NOT NULL AUTO_INCREMENT,
   id_usuario  INT               NOT NULL,
   hash_codigo CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  creado_por  INT               NOT NULL,
+  creado_por  INT               DEFAULT NULL,   -- NULL = generado desde la consola del servidor (primer administrador)
   creado_en   TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expira_en   DATETIME          NOT NULL,
   usado_en    DATETIME          DEFAULT NULL,

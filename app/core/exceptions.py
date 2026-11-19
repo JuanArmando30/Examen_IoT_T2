@@ -43,3 +43,13 @@ class ErrorBaseDatos(ErrorAplicacion):
 class BaseDatosNoDisponible(ErrorAplicacion):
     codigo_http = 503
     mensaje_por_defecto = "La base de datos no está disponible en este momento."
+
+
+class EsquemaPendiente(ErrorAplicacion):
+    """La base aún no tiene las migraciones que necesita esta función."""
+
+    codigo_http = 503
+    mensaje_por_defecto = (
+        "La base de datos aún no tiene las migraciones de Administración "
+        "(V001–V009). Aplícalas con: python -m app.db.migrar aplicar."
+    )

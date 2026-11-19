@@ -1,0 +1,5 @@
+# Solo para desarrollo y pruebas (no se instala en el servidor).
+#   python -m pip install -r requirements.txt -r requirements-dev.txt
+#   python -m pytest -q
+pytest==8.3.5
+httpx==0.28.1
