@@ -350,3 +350,15 @@ def test_secreto_corto_o_igual_a_una_clave_se_rechaza(monkeypatch):
 
 def test_repositorio_falso_v010():
     assert RepositorioFalso().version == 10
+
+
+# ------------------------------------------------------------------ Etapa 5: catálogo técnico con sesión
+
+def test_admin_con_sesion_edita_el_catalogo_tecnico_sin_clave(repo, cliente, sesion_de):
+    _usuario(repo, "jefa@empresa.com", rol="admin")
+    _usuario(repo, "cliente@ejemplo.com")
+    r = cliente.post("/vehiculos/1/eliminar", headers=_bearer(sesion_de("jefa@empresa.com")))
+    assert r.status_code in (200, 204, 409), r.text          # pasó la autorización (409 = tiene historial)
+    assert cliente.post("/vehiculos/1/eliminar",
+                        headers=_bearer(sesion_de("cliente@ejemplo.com"))).status_code == 403
+    assert cliente.post("/vehiculos/1/eliminar").status_code == 401

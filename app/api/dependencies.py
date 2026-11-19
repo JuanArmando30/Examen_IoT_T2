@@ -60,8 +60,22 @@ Sesion = Annotated[Principal, Depends(requiere_sesion)]
 def obtener_rol(
     contenedor: ContenedorDep,
     clave: Annotated[Optional[str], Depends(esquema_api_key)],
+    principal: PrincipalOpcional,
 ) -> Optional[str]:
-    return identificar_rol(clave, contenedor.seguridad)
+    """Rol para las escrituras del catálogo técnico (vehículos, comandos, DEMO).
+
+    - Clave X-API-Key (transición): manda la clave, como siempre.
+    - Sin clave: el token de un administrador equivale a la clave de admin
+      (Etapa 5: el administrador con sesión no necesita escribir la clave).
+      Un token de comprador no basta → 403.
+    """
+    if clave:
+        return identificar_rol(clave, contenedor.seguridad)
+    if principal is not None:
+        if not principal.es_admin:
+            raise Prohibido("Esta operación es solo para administradores.")
+        return ROL_ADMIN
+    return None
 
 
 RolDep = Annotated[Optional[str], Depends(obtener_rol)]
