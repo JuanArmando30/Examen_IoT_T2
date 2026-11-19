@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter
 
-from app.api.dependencies import ContenedorDep, IdVehiculo, Operador
+from app.api.dependencies import ContenedorDep, IdVehiculo, LecturaUnidad, Operador
 from app.api.documentacion import ESCRITURA, LECTURA, TAG_ESTADO
 from app.models.schemas import EstadoActualizar, EstadoOut
 from app.websocket import eventos
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/vehiculos/{id_vehiculo}/estado",
     response_model=EstadoOut,
     responses=LECTURA,
 )
-def obtener_estado(id_vehiculo: IdVehiculo, contenedor: ContenedorDep):
+def obtener_estado(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _lectura: LecturaUnidad):
     """**Stored Procedures:** `sp_obtener_vehiculo` y `sp_obtener_estado`.
 
     404 si el vehículo no existe o todavía no tiene estado.

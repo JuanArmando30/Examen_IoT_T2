@@ -3,7 +3,8 @@ from typing import List
 from fastapi import APIRouter
 
 from app.api.dependencies import (
-    Administrador, ContenedorDep, Control, IdDemo, IdMovimiento, IdVehiculo, Operador,
+    Administrador, ContenedorDep, ControlUnidad, IdDemo, IdMovimiento, IdVehiculo,
+    LecturaUnidad, Operador,
 )
 from app.api.documentacion import (
     BORRADO, ESCRITURA, LECTURA, TAG_DEMO, TAG_MOV_DEMO,
@@ -26,7 +27,7 @@ router = APIRouter(prefix="/vehiculos/{id_vehiculo}/demos")
     summary="Listar las DEMO del vehículo",
     response_model=List[DemoOut], responses=LECTURA,
 )
-def listar_demos(id_vehiculo: IdVehiculo, contenedor: ContenedorDep):
+def listar_demos(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _lectura: LecturaUnidad):
     """**Stored Procedures:** `sp_obtener_vehiculo` y `sp_obtener_demos`."""
     return contenedor.demos.listar(id_vehiculo)
 
@@ -55,7 +56,8 @@ def crear_demo(
     summary="¿Hay una DEMO en ejecución?",
     response_model=DemoEjecucionOut, responses=LECTURA,
 )
-def estado_ejecucion(id_vehiculo: IdVehiculo, contenedor: ContenedorDep):
+def estado_ejecucion(id_vehiculo: IdVehiculo, contenedor: ContenedorDep,
+                     _lectura: LecturaUnidad):
     """Estado en memoria de la ejecución (no consulta RDS salvo la
     existencia del vehículo: `sp_obtener_vehiculo`)."""
     contenedor.vehiculos.obtener_o_fallar(id_vehiculo)
@@ -68,7 +70,7 @@ def estado_ejecucion(id_vehiculo: IdVehiculo, contenedor: ContenedorDep):
     response_model=DemoCanceladaOut, responses=ESCRITURA,
 )
 async def cancelar_demo(
-    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _rol: Control,
+    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _actor: ControlUnidad,
 ):
     """Suspende **inmediatamente** la emisión de movimientos posteriores,
     deja el estado en `DETENER` (si el vehículo tiene ese comando) y
@@ -124,7 +126,7 @@ def eliminar_demo(
 )
 async def iniciar_demo(
     id_vehiculo: IdVehiculo, id_demo: IdDemo,
-    contenedor: ContenedorDep, _rol: Control,
+    contenedor: ContenedorDep, _actor: ControlUnidad,
 ):
     """Responde **202 Accepted** de inmediato; la secuencia corre en segundo
     plano y se transmite por `ws://localhost:8000/ws/vehiculos/{id_vehiculo}`:
@@ -155,6 +157,7 @@ async def iniciar_demo(
 )
 def listar_movimientos(
     id_vehiculo: IdVehiculo, id_demo: IdDemo, contenedor: ContenedorDep,
+    _lectura: LecturaUnidad,
 ):
     """**Stored Procedures:** `sp_obtener_demos` (pertenencia) y
     `sp_obtener_movimientos_demo` (ordenados por `orden`)."""

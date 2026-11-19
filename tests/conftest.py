@@ -6,6 +6,8 @@ Ejecutar:  python -m pytest -q
 """
 
 import os
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +16,7 @@ os.environ.setdefault("API_KEY_OPERADOR", "clave-operador-123")
 os.environ.setdefault("API_KEY_ADMIN", "clave-admin-12345")
 
 from app.contenedor import Contenedor                      # noqa: E402
-from app.core.config import SeguridadSettings               # noqa: E402
+from app.core.config import AuthSettings, SeguridadSettings  # noqa: E402
 from app.core.exceptions import ConflictoNegocio, EsquemaPendiente  # noqa: E402
 from app.main import crear_app                              # noqa: E402
 
@@ -22,13 +24,19 @@ CLAVE_OPERADOR = "clave-operador-123"
 CLAVE_ADMIN = "clave-admin-12345"
 ADMIN = {"X-API-Key": CLAVE_ADMIN}
 OPERADOR = {"X-API-Key": CLAVE_OPERADOR}
+SECRETO = "secreto-de-pruebas-0123456789-abcdefghij"
+
+
+def _ahora():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class RepositorioFalso:
     """Lo mínimo de cada SP para probar rutas y servicios."""
 
-    def __init__(self, con_v009=True):
+    def __init__(self, con_v009=True, version=10):
         self.con_v009 = con_v009
+        self.version = version
         self.llamadas = []
         self.vehiculos = {1: {"id_vehiculo": 1, "nombre": "Excavadora IoT", "modelo": "Modelo X",
                               "descripcion": None, "microcontrolador": "ESP8266", "fecha_registro": None,
@@ -40,6 +48,8 @@ class RepositorioFalso:
         self.modelos, self.capacidades, self.unidades = {}, {}, {}
         self.usuarios, self.asignaciones, self.auditoria = {}, [], []
         self._ids = {"modelo": 0, "vehiculo": 1, "usuario": 0, "asignacion": 0}
+        self.tokens, self.codigos, self.soportes, self.historial_autor = {}, [], [], []
+        self.estados = {}
 
     def _nuevo(self, tipo):
         self._ids[tipo] += 1
@@ -70,7 +80,18 @@ class RepositorioFalso:
         return list(self.comandos.get(id_vehiculo, []))
 
     def obtener_estado(self, id_vehiculo):
-        return None
+        return self.estados.get(id_vehiculo)
+
+    def actualizar_estado(self, id_vehiculo, id_comando, conectado):
+        self.estados[id_vehiculo] = {"id_vehiculo": id_vehiculo, "id_comando": id_comando,
+                                     "conectado": conectado, "fecha_actualizacion": None}
+
+    def registrar_historial(self, id_vehiculo, id_comando, origen):
+        self._anotar("sp_registrar_historial")
+
+    @contextmanager
+    def transaccion(self):
+        yield self
 
     def obtener_demos(self, id_vehiculo):
         return []
@@ -82,7 +103,7 @@ class RepositorioFalso:
     # ---------------- V009 ----------------
     def version_esquema(self):
         self._exigir()
-        return 9
+        return self.version
 
     def obtener_historial_reciente(self, id_vehiculo, limite):
         self._exigir()
@@ -241,6 +262,141 @@ class RepositorioFalso:
         a.update(hasta="2026-11-19T01:00:00", motivo_fin=motivo or "finalizada")
         self.unidades[a["id_vehiculo"]]["estado_comercial"] = estado
 
+    # ---------------- V010 (autenticación) ----------------
+    def login_obtener(self, correo):
+        u = next((u for u in self.usuarios.values() if u["correo"] == correo), None)
+        if u is None:
+            return None
+        hasta = u.get("bloqueado_hasta")
+        return {**u, "hash_contrasena": u.get("hash"), "debe_cambiar_contrasena": False,
+                "intentos_fallidos": u.get("fallos", 0), "bloqueado": bool(hasta and hasta > _ahora())}
+
+    def login_resultado(self, i, exito, max_intentos, bloqueo_min):
+        u = self.usuarios[i]
+        if exito:
+            u.update(fallos=0, bloqueado_hasta=None)
+        else:
+            u["fallos"] = u.get("fallos", 0) + 1
+            if u["fallos"] >= max_intentos:
+                u.update(fallos=0, bloqueado_hasta=_ahora() + timedelta(minutes=bloqueo_min))
+
+    def obtener_usuario_auth(self, i):
+        u = self.usuarios.get(i)
+        return u and {**u, "debe_cambiar_contrasena": False}
+
+    def _revocar(self, condicion, motivo):
+        for t in self.tokens.values():
+            if t["revocado"] is None and condicion(t):
+                t["revocado"] = motivo
+
+    def cambiar_contrasena(self, i, hash_contrasena):
+        self.usuarios[i]["hash"] = hash_contrasena
+        self._revocar(lambda t: t["id_usuario"] == i, "cambio_contrasena")
+
+    def token_crear(self, i, hash_token, familia, expira, agente):
+        self.tokens[hash_token] = {"id_usuario": i, "familia": familia, "expira": expira,
+                                   "usado": None, "revocado": None}
+
+    def token_usar(self, hash_token, nuevo_hash, expira, agente):
+        t = self.tokens.get(hash_token)
+        if t is None:
+            return {"resultado": "invalido"}
+        if t["revocado"]:
+            return {"resultado": "revocado"}
+        if t["usado"]:
+            self._revocar(lambda x: x["familia"] == t["familia"], "reutilizacion")
+            return {"resultado": "reutilizado"}
+        if t["expira"] <= _ahora():
+            return {"resultado": "expirado"}
+        u = self.usuarios[t["id_usuario"]]
+        if not u["activo"]:
+            self._revocar(lambda x: x["familia"] == t["familia"], "usuario_inactivo")
+            return {"resultado": "inactivo"}
+        t["usado"] = _ahora()
+        self.token_crear(t["id_usuario"], nuevo_hash, t["familia"], expira, agente)
+        return {"resultado": "ok", **u, "debe_cambiar_contrasena": False}
+
+    def token_revocar(self, hash_token):
+        t = self.tokens.get(hash_token)
+        if t:
+            self._revocar(lambda x: x["familia"] == t["familia"], "cierre_sesion")
+
+    def codigo_crear(self, i, hash_codigo, creado_por, expira):
+        for c in self.codigos:
+            if c["id_usuario"] == i and c["usado"] is None:
+                c["intentos"] = 65535
+        self.codigos.append({"id_usuario": i, "hash": hash_codigo, "creado_por": creado_por,
+                             "expira": expira, "usado": None, "intentos": 0})
+
+    def codigo_usar(self, correo, hash_codigo, hash_contrasena, max_intentos):
+        u = next((u for u in self.usuarios.values() if u["correo"] == correo and u["activo"]), None)
+        vivos = [c for c in self.codigos if u and c["id_usuario"] == u["id_usuario"] and c["usado"] is None
+                 and c["expira"] > _ahora() and c["intentos"] < max_intentos]
+        if not vivos:
+            return {"resultado": "invalido", "id_usuario": None}
+        c = vivos[-1]
+        if c["hash"] == hash_codigo:
+            c["usado"] = _ahora()
+            u["hash"] = hash_contrasena
+            u.update(fallos=0, bloqueado_hasta=None)
+            self._revocar(lambda t: t["id_usuario"] == u["id_usuario"], "restablecimiento")
+            return {"resultado": "ok", "id_usuario": u["id_usuario"]}
+        c["intentos"] += 1
+        return {"resultado": "agotado" if c["intentos"] >= max_intentos else "invalido", "id_usuario": None}
+
+    def _vigente(self, id_vehiculo):
+        return next((a for a in self.asignaciones if a["id_vehiculo"] == id_vehiculo and a["hasta"] is None), None)
+
+    def acceso_unidad(self, id_usuario, id_vehiculo):
+        if id_vehiculo not in self.vehiculos:
+            return None
+        unidad = self.unidades.get(id_vehiculo, {"estado_comercial": "exhibicion"})
+        vigente = self._vigente(id_vehiculo)
+        soporte = any(s["id_vehiculo"] == id_vehiculo and s["revocada_en"] is None and s["expira_en"] > _ahora()
+                      and s["otorgada_a"] in (None, id_usuario) for s in self.soportes)
+        return {"id_vehiculo": id_vehiculo, "estado_comercial": unidad["estado_comercial"],
+                "activo": self.vehiculos[id_vehiculo]["activo"],
+                "es_propietario": bool(vigente and vigente["id_usuario"] == id_usuario),
+                "soporte_vigente": soporte}
+
+    def soporte_otorgar(self, id_vehiculo, id_usuario, otorgada_a, motivo, expira):
+        vigente = self._vigente(id_vehiculo)
+        if not vigente or vigente["id_usuario"] != id_usuario:
+            raise ConflictoNegocio("Solo el comprador de la unidad puede autorizar el soporte.")
+        i = len(self.soportes) + 1
+        self.soportes.append({"id_autorizacion": i, "id_vehiculo": id_vehiculo, "otorgada_por": id_usuario,
+                              "otorgada_a": otorgada_a, "administrador": None, "motivo": motivo,
+                              "creada_en": _ahora(), "expira_en": expira, "revocada_en": None})
+        return i
+
+    def soporte_revocar(self, id_vehiculo, id_usuario):
+        n = 0
+        for s in self.soportes:
+            if s["id_vehiculo"] == id_vehiculo and s["otorgada_por"] == id_usuario and s["revocada_en"] is None:
+                s["revocada_en"], n = _ahora(), n + 1
+        return n
+
+    def soporte_listar(self, id_vehiculo):
+        return [{**s, "vigente": s["revocada_en"] is None and s["expira_en"] > _ahora()}
+                for s in reversed(self.soportes) if s["id_vehiculo"] == id_vehiculo]
+
+    def registrar_historial_autor(self, id_vehiculo, id_comando, origen, id_usuario, id_sesion):
+        self._anotar("sp_registrar_historial_autor")
+        self.historial_autor.append((id_vehiculo, id_comando, id_usuario))
+
+    def mis_vehiculos(self, id_usuario):
+        return [{"id_vehiculo": a["id_vehiculo"], "nombre": self.unidades[a["id_vehiculo"]]["nombre"],
+                 "numero_serie": None, "estado_comercial": "vendida", "es_simulada": False, "activo": True,
+                 "id_modelo": None, "modelo": None, "id_asignacion": a["id_asignacion"],
+                 "asignada_desde": "2026-11-19T00:00:00", "conectado": None, "fecha_actualizacion": None}
+                for a in self.asignaciones if a["id_usuario"] == id_usuario and a["hasta"] is None]
+
+
+def construir_cliente(repo, auth=None, control_abierto=False):
+    seguridad = SeguridadSettings(CLAVE_OPERADOR, CLAVE_ADMIN, control_abierto=control_abierto)
+    auth = auth or AuthSettings(secreto=SECRETO)
+    return TestClient(crear_app(lambda: Contenedor(repositorio=repo, seguridad=seguridad, auth=auth)))
+
 
 @pytest.fixture
 def repo():
@@ -249,7 +405,5 @@ def repo():
 
 @pytest.fixture
 def cliente(repo):
-    seguridad = SeguridadSettings(CLAVE_OPERADOR, CLAVE_ADMIN, control_abierto=False)
-    app = crear_app(lambda: Contenedor(repositorio=repo, seguridad=seguridad))
-    with TestClient(app) as c:
+    with construir_cliente(repo) as c:
         yield c

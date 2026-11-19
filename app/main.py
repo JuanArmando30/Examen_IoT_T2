@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.documentacion import ETIQUETAS
 from app.api.routes import (
-    admin, comandos, control, demos, estado, historial, movimientos, sistema, vehiculos, ws,
+    admin, auth, comandos, control, demos, estado, historial, movimientos, sistema, vehiculos, ws,
 )
 from app.contenedor import Contenedor
 from app.core.config import origenes_cors
@@ -23,8 +23,13 @@ DESCRIPCION = """
 API local para gestionar un **vehículo IoT** (FastAPI + Amazon RDS).
 
 * **GET** consultan; **POST** escriben, actualizan y ejecutan acciones.
-* Las operaciones de escritura y control exigen la cabecera `X-API-Key`
-  (botón **Authorize**). Eliminar exige la clave de administrador.
+* **Sesión** (`/auth`): correo + contraseña → token de acceso corto
+  (`Authorization: Bearer …`) + token de renovación que rota en cada uso.
+* **Autorización por unidad**: el comprador solo ve y opera SUS unidades;
+  el administrador opera unidades en inventario/exhibición y una vendida
+  solo con autorización de soporte vigente del comprador.
+* Transición (se retira en la Etapa 9): la cabecera `X-API-Key` sigue
+  aceptándose para escrituras y control; eliminar exige la de administrador.
 * Con `CONTROL_ABIERTO=true` (en `.env`), **solo** mover, iniciar/cancelar
   DEMO y `GET /sesion` se aceptan sin clave; crear, editar y eliminar la
   siguen exigiendo.
@@ -63,19 +68,19 @@ def crear_app(fabrica_contenedor=Contenedor):
     app = FastAPI(
         title="API Vehículo IoT",
         description=DESCRIPCION,
-        version="1.1.0",
+        version="1.2.0",
         openapi_tags=ETIQUETAS,
         lifespan=lifespan,
     )
 
     # CORS para el frontend en GitHub Pages. Solo los métodos y cabeceras que
-    # usa el cliente; sin cookies (allow_credentials=False). No afecta al
-    # WebSocket ni sustituye a la autenticación por X-API-Key.
+    # usa el cliente; sin cookies (allow_credentials=False): el token viaja en
+    # la cabecera Authorization, no en cookies. No afecta al WebSocket.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origenes_cors(),
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "X-API-Key"],
+        allow_headers=["Content-Type", "X-API-Key", "Authorization"],
         allow_credentials=False,
         max_age=600,
     )
@@ -89,6 +94,7 @@ def crear_app(fabrica_contenedor=Contenedor):
         return JSONResponse(
             status_code=error.codigo_http,
             content={"detail": error.mensaje},
+            headers={"WWW-Authenticate": "Bearer"} if error.codigo_http == 401 else None,
         )
 
     @app.exception_handler(Exception)
@@ -103,7 +109,7 @@ def crear_app(fabrica_contenedor=Contenedor):
             content={"detail": "Error interno del servidor."},
         )
 
-    for modulo in (sistema, vehiculos, comandos, estado, historial,
+    for modulo in (sistema, auth, vehiculos, comandos, estado, historial,
                    movimientos, demos, control, admin, ws):
         app.include_router(modulo.router)
 

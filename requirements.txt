@@ -3,3 +3,5 @@ uvicorn[standard]==0.54.0
 pydantic==2.14.1
 mysql-connector-python==26.7.0
 python-dotenv==1.2.4
+PyJWT==2.10.1
+argon2-cffi==23.1.0

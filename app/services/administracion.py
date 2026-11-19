@@ -6,9 +6,8 @@ asignaciones, auditoría y métricas.
 - Cada alta, cambio, asignación o cambio de rol queda en la auditoría.
 - Si la base aún no tiene V009, responden 503 (EsquemaPendiente) y el resto
   de la API (Control, Monitoreo) sigue funcionando igual.
-- `actor` es quien hace la operación. En esta etapa es el administrador
-  identificado por la clave X-API-Key (id_usuario = None); en la Etapa 4
-  será el usuario del token.
+- `actor` es quien hace la operación: el administrador con sesión (token,
+  id_usuario real) o, en transición, la clave X-API-Key (id_usuario = None).
 """
 
 import json
@@ -29,6 +28,8 @@ from app.core.exceptions import (
 logger = logging.getLogger(__name__)
 
 VERSION_ADMINISTRACION = 9
+VERSION_AUTENTICACION = 10
+VERSION_MAS_RECIENTE = VERSION_AUTENTICACION      # deja de consultarse al alcanzarla
 ESTADOS = ("inventario", "vendida", "exhibicion", "baja")
 _PATRON_CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 
@@ -57,8 +58,9 @@ def pagina(registros, limite, desplazamiento):
 
 
 class EsquemaBD:
-    """Versión de la base. Si V009 aún no existe, se vuelve a comprobar cada 30 s
-    (así basta con aplicar la migración: no hay que reiniciar la API)."""
+    """Versión de la base. Mientras no sea la más reciente que conoce el código,
+    se vuelve a comprobar cada 30 s (así basta con aplicar la migración: no hay
+    que reiniciar la API)."""
 
     REINTENTO_S = 30
 
@@ -68,7 +70,7 @@ class EsquemaBD:
         self._comprobado = 0.0
 
     def version(self):
-        if self._version is not None and self._version >= VERSION_ADMINISTRACION:
+        if self._version is not None and self._version >= VERSION_MAS_RECIENTE:
             return self._version
         ahora = time.monotonic()
         if self._version is not None and ahora - self._comprobado < self.REINTENTO_S:
@@ -88,6 +90,16 @@ class EsquemaBD:
     def exigir(self):
         if not self.tiene_administracion():
             raise EsquemaPendiente()
+
+    def tiene_autenticacion(self):
+        return self.version() >= VERSION_AUTENTICACION
+
+    def exigir_autenticacion(self):
+        if not self.tiene_autenticacion():
+            raise EsquemaPendiente(
+                "La base aún no tiene la migración V010 (inicio de sesión). "
+                "Aplícala con: python -m app.db.migrar aplicar --respaldo <snapshot>."
+            )
 
 
 class AuditoriaService:

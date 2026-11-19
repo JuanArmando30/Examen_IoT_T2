@@ -1,6 +1,7 @@
 """Capa de acceso a los procedimientos almacenados de vehiculo_iot.
 
-Los 21 originales (prácticas 2.3/2.4) y los 25 de ADMINISTRACIÓN (V009).
+Los 21 originales (prácticas 2.3/2.4), los 25 de ADMINISTRACIÓN (V009) y
+los 14 de AUTENTICACIÓN (V010).
 Responsabilidad única: ejecutar SP con parámetros enlazados y devolver
 filas como diccionarios. Aquí NO hay reglas de negocio (eso vive en
 app/services) ni código HTTP.
@@ -86,8 +87,33 @@ PROCEDIMIENTOS_V009_ESCRITURA = frozenset({
     "sp_finalizar_asignacion",
 })
 
-PROCEDIMIENTOS_NUEVOS = PROCEDIMIENTOS_V009_LECTURA | PROCEDIMIENTOS_V009_ESCRITURA
-_ESCRITURA = PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA
+# --- V010 · Autenticación y autorización por unidad ------------------------
+
+PROCEDIMIENTOS_V010_LECTURA = frozenset({
+    "sp_login_obtener",
+    "sp_obtener_usuario_auth",
+    "sp_acceso_unidad",
+    "sp_soporte_listar",
+})
+
+PROCEDIMIENTOS_V010_ESCRITURA = frozenset({
+    "sp_login_resultado",
+    "sp_cambiar_contrasena",
+    "sp_token_crear",
+    "sp_token_usar",
+    "sp_token_revocar",
+    "sp_codigo_crear",
+    "sp_codigo_usar",
+    "sp_soporte_otorgar",
+    "sp_soporte_revocar",
+    "sp_registrar_historial_autor",
+})
+
+PROCEDIMIENTOS_V010 = PROCEDIMIENTOS_V010_LECTURA | PROCEDIMIENTOS_V010_ESCRITURA
+
+PROCEDIMIENTOS_NUEVOS = (PROCEDIMIENTOS_V009_LECTURA | PROCEDIMIENTOS_V009_ESCRITURA
+                         | PROCEDIMIENTOS_V010)
+_ESCRITURA = PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA | PROCEDIMIENTOS_V010_ESCRITURA
 PROCEDIMIENTOS_PERMITIDOS = PROCEDIMIENTOS_ORIGINALES | PROCEDIMIENTOS_NUEVOS
 
 # Errores de MySQL que significan "no hay conexión / sin acceso".
@@ -462,6 +488,60 @@ class _ProcedimientosSP:
 
     def mis_vehiculos(self, id_usuario):
         return self._llamar("sp_mis_vehiculos", (id_usuario,))
+
+    # ================= V010 · AUTENTICACIÓN =================
+
+    def login_obtener(self, correo):
+        """Fila con hash_contrasena y bloqueado, o None. El hash nunca sale de la API."""
+        registros = self._llamar("sp_login_obtener", (correo,))
+        return registros[0] if registros else None
+
+    def login_resultado(self, id_usuario, exito, max_intentos, bloqueo_min):
+        self._llamar("sp_login_resultado", (id_usuario, exito, max_intentos, bloqueo_min))
+
+    def obtener_usuario_auth(self, id_usuario):
+        registros = self._llamar("sp_obtener_usuario_auth", (id_usuario,))
+        return registros[0] if registros else None
+
+    def cambiar_contrasena(self, id_usuario, hash_contrasena):
+        self._llamar("sp_cambiar_contrasena", (id_usuario, hash_contrasena))
+
+    def token_crear(self, id_usuario, hash_token, familia, expira, agente):
+        self._llamar("sp_token_crear", (id_usuario, hash_token, familia, expira, agente))
+
+    def token_usar(self, hash_token, nuevo_hash, expira, agente):
+        """Rota el token. Devuelve dict con «resultado» (+ datos del usuario si es ok)."""
+        registros = self._llamar("sp_token_usar", (hash_token, nuevo_hash, expira, agente))
+        return registros[0] if registros else {"resultado": "invalido"}
+
+    def token_revocar(self, hash_token):
+        self._llamar("sp_token_revocar", (hash_token,))
+
+    def codigo_crear(self, id_usuario, hash_codigo, creado_por, expira):
+        self._llamar("sp_codigo_crear", (id_usuario, hash_codigo, creado_por, expira))
+
+    def codigo_usar(self, correo, hash_codigo, hash_contrasena, max_intentos):
+        registros = self._llamar("sp_codigo_usar", (correo, hash_codigo, hash_contrasena, max_intentos))
+        return registros[0] if registros else {"resultado": "invalido", "id_usuario": None}
+
+    def acceso_unidad(self, id_usuario, id_vehiculo):
+        """Relación usuario↔unidad, o None si la unidad no existe."""
+        registros = self._llamar("sp_acceso_unidad", (id_usuario, id_vehiculo))
+        return registros[0] if registros else None
+
+    def soporte_otorgar(self, id_vehiculo, id_usuario, otorgada_a, motivo, expira):
+        registros = self._llamar("sp_soporte_otorgar", (id_vehiculo, id_usuario, otorgada_a, motivo, expira))
+        return _id_creado(registros, "id_autorizacion")
+
+    def soporte_revocar(self, id_vehiculo, id_usuario):
+        registros = self._llamar("sp_soporte_revocar", (id_vehiculo, id_usuario))
+        return int(registros[0]["revocadas"]) if registros else 0
+
+    def soporte_listar(self, id_vehiculo):
+        return self._llamar("sp_soporte_listar", (id_vehiculo,))
+
+    def registrar_historial_autor(self, id_vehiculo, id_comando, origen, id_usuario, id_sesion):
+        self._llamar("sp_registrar_historial_autor", (id_vehiculo, id_comando, origen, id_usuario, id_sesion))
 
 
 class TransaccionSP(_ProcedimientosSP):

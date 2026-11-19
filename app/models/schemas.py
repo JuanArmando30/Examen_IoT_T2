@@ -431,3 +431,98 @@ class MetricasOut(BaseModel):
     movimientos_total: int
     ultimo_movimiento: Optional[datetime] = None
     generado_en: datetime
+
+
+# ===================== SESIÓN (Etapa 4) =====================
+
+
+class LoginSolicitud(BaseModel):
+    correo: str = Field(min_length=3, max_length=254)
+    contrasena: str = Field(min_length=1, max_length=128, repr=False)
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "correo": "cliente@ejemplo.com", "contrasena": "********",
+    }]})
+
+
+class RenovarSolicitud(BaseModel):
+    token_renovacion: str = Field(min_length=16, max_length=128, repr=False)
+
+
+class RestablecerSolicitud(BaseModel):
+    correo: str = Field(min_length=3, max_length=254)
+    codigo: str = Field(min_length=10, max_length=16, repr=False,
+                        description="Código XXXXX-XXXXX que entregó el administrador.")
+    contrasena_nueva: str = Field(min_length=10, max_length=128, repr=False)
+
+
+class CambiarContrasenaSolicitud(BaseModel):
+    contrasena_actual: str = Field(min_length=1, max_length=128, repr=False)
+    contrasena_nueva: str = Field(min_length=10, max_length=128, repr=False)
+
+
+class SoporteOtorgar(BaseModel):
+    horas: int = Field(default=24, ge=1, le=72, description="Vigencia de la autorización (1–72 h).")
+    motivo: Optional[str] = Field(default=None, max_length=255)
+    id_administrador: Optional[int] = Field(
+        default=None, gt=0,
+        description="Solo ese administrador; vacío = cualquier administrador activo.")
+
+
+class UsuarioSesionOut(BaseModel):
+    id_usuario: int
+    correo: str
+    nombre: str
+    rol: Literal["admin", "usuario"]
+    debe_cambiar_contrasena: bool = False
+
+
+class SesionOut(BaseModel):
+    token_acceso: str
+    tipo: Literal["Bearer"] = "Bearer"
+    expira_en: int = Field(description="Segundos de vigencia del token de acceso.")
+    acceso_expira: datetime
+    token_renovacion: str = Field(description="Guárdalo con cuidado: rota en cada /auth/renovar.")
+    renovacion_expira: datetime
+    usuario: UsuarioSesionOut
+
+
+class CodigoRestablecimientoOut(BaseModel):
+    id_usuario: int
+    correo: str
+    codigo: str = Field(description="Se muestra UNA sola vez; entrégalo al usuario por un canal seguro.")
+    expira_en: datetime
+    minutos: int
+
+
+class MiVehiculoOut(BaseModel):
+    id_vehiculo: int
+    nombre: str
+    numero_serie: Optional[str] = None
+    estado_comercial: str
+    es_simulada: bool
+    activo: bool
+    id_modelo: Optional[int] = None
+    modelo: Optional[str] = None
+    id_asignacion: int
+    asignada_desde: datetime
+    conectado: Optional[bool] = None
+    fecha_actualizacion: Optional[datetime] = None
+
+
+class SoporteOut(BaseModel):
+    id_autorizacion: int
+    id_vehiculo: int
+    otorgada_por: int
+    otorgada_a: Optional[int] = None
+    administrador: Optional[str] = None
+    motivo: Optional[str] = None
+    creada_en: datetime
+    expira_en: datetime
+    revocada_en: Optional[datetime] = None
+    vigente: bool
+
+
+class SoporteRevocadoOut(BaseModel):
+    id_vehiculo: int
+    revocadas: int

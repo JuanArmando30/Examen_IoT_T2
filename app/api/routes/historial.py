@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.dependencies import ContenedorDep, IdVehiculo
+from app.api.dependencies import ContenedorDep, IdVehiculo, LecturaUnidad
 from app.api.documentacion import LECTURA, TAG_HISTORIAL
 from app.models.schemas import HistorialOut
 from app.services.historial_service import LIMITE_HISTORIAL
@@ -15,7 +15,8 @@ router = APIRouter(prefix="/vehiculos/{id_vehiculo}/historial",
     response_model=HistorialOut,
     responses=LECTURA,
 )
-def obtener_historial(id_vehiculo: IdVehiculo, contenedor: ContenedorDep):
+def obtener_historial(id_vehiculo: IdVehiculo, contenedor: ContenedorDep,
+                      _lectura: LecturaUnidad):
     """Devuelve **como máximo 10** movimientos individuales, del más
     reciente al más antiguo. Si hay menos, devuelve solo los disponibles
     (lista vacía si no hay ninguno). Los movimientos de DEMO nunca

@@ -11,12 +11,22 @@ TAG_MOVIMIENTOS = "Movimiento individual"
 TAG_DEMO = "DEMO"
 TAG_MOV_DEMO = "Movimientos de DEMO"
 TAG_ADMIN = "Administración"
+TAG_SESION = "Sesión"
+TAG_MIS = "Mis vehículos"
 
 ETIQUETAS = [
+    {"name": TAG_SESION,
+     "description": "Inicio de sesión con correo y contraseña: token de acceso corto "
+                    "(Bearer, en memoria) + token de renovación que rota en cada uso. "
+                    "Requiere TOKEN_SECRETO en .env y la migración V010."},
+    {"name": TAG_MIS,
+     "description": "Unidades asignadas al comprador con sesión y autorización de "
+                    "soporte (consentimiento temporal para que la empresa la opere)."},
     {"name": TAG_ADMIN,
      "description": "Inventario de la empresa: modelos y sus capacidades, unidades "
                     "físicas, clientes, asignaciones, auditoría y métricas. Requiere la "
-                    "clave de administrador (Etapa 4: token de administrador). Responde "
+                    "token de un administrador (o, en transición, la clave X-API-Key de "
+                    "administrador). Responde "
                     "503 si la base aún no tiene las migraciones V001–V009. SP de V009."},
     {"name": TAG_SISTEMA, "description": "Comprobación del servicio y de RDS."},
     {"name": TAG_VEHICULOS,
@@ -54,8 +64,10 @@ def _r(descripcion):
 
 R400 = {400: _r("Solicitud inválida (referencia inexistente o valor fuera "
                 "de rango).")}
-R401 = {401: _r("Falta la cabecera X-API-Key o la clave es inválida.")}
-R403 = {403: _r("La clave no tiene permisos de administrador.")}
+R401 = {401: _r("Sin sesión válida: falta el token Bearer (o la cabecera X-API-Key), "
+                "o es inválido o venció.")}
+R403 = {403: _r("Hay sesión, pero sin permiso para esa unidad u operación.")}
+R429 = {429: _r("Demasiados intentos: espera y vuelve a probar.")}
 R404 = {404: _r("Recurso no encontrado.")}
 R409 = {409: _r("Conflicto con el estado actual (duplicado, inactivo, "
                 "DEMO en curso, recurso en uso...).")}
@@ -72,3 +84,8 @@ R503_ADMIN = {503: _r("Amazon RDS no disponible, o la base aún no tiene las "
                       "migraciones de Administración (V001–V009).")}
 ADMIN_LECTURA = {**R401, **R403, **R404, **R422, **R500, **R503_ADMIN}
 ADMIN_ESCRITURA = {**R400, **R401, **R403, **R404, **R409, **R422, **R500, **R503_ADMIN}
+
+R503_SESION = {503: _r("Inicio de sesión no configurado (TOKEN_SECRETO), base sin la "
+                       "migración V010 o Amazon RDS no disponible.")}
+SESION = {**R400, **R401, **R422, **R429, **R500, **R503_SESION}
+SESION_PRIVADA = {**R400, **R401, **R403, **R404, **R409, **R422, **R429, **R500, **R503_SESION}

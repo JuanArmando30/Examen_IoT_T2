@@ -45,6 +45,32 @@ class BaseDatosNoDisponible(ErrorAplicacion):
     mensaje_por_defecto = "La base de datos no está disponible en este momento."
 
 
+class NoAutorizado(ErrorAplicacion):
+    """Sin sesión válida (token ausente, vencido o inválido)."""
+
+    codigo_http = 401
+    mensaje_por_defecto = "Inicia sesión para continuar."
+
+
+class Prohibido(ErrorAplicacion):
+    """Hay sesión, pero no permiso sobre ese recurso."""
+
+    codigo_http = 403
+    mensaje_por_defecto = "No tienes permiso para esta unidad u operación."
+
+
+class DemasiadosIntentos(ErrorAplicacion):
+    codigo_http = 429
+    mensaje_por_defecto = "Demasiados intentos. Espera unos minutos y vuelve a probar."
+
+
+class NoConfigurado(ErrorAplicacion):
+    codigo_http = 503
+    mensaje_por_defecto = (
+        "El inicio de sesión no está configurado en el servidor (falta TOKEN_SECRETO en .env)."
+    )
+
+
 class EsquemaPendiente(ErrorAplicacion):
     """La base aún no tiene las migraciones que necesita esta función."""
 

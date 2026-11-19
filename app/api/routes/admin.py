@@ -1,8 +1,8 @@
-"""ADMINISTRACIÓN (Etapa 3): inventario de la empresa.
+"""ADMINISTRACIÓN (Etapas 3–4): inventario de la empresa.
 
-Todas las rutas exigen al administrador (hoy: clave X-API-Key de
-administrador; Etapa 4: token de administrador) y responden 503 si la base
-aún no tiene las migraciones V001–V009. Convención de la API existente:
+Todas las rutas exigen al administrador (token de un usuario con rol admin
+o, en transición, la clave X-API-Key de administrador) y responden 503 si
+la base aún no tiene las migraciones V001–V009. Convención de la API existente:
 GET consulta y POST …/actualizar, POST …/baja, POST …/finalizar escriben.
 El administrador gestiona el inventario; NO obtiene aquí control de las
 unidades vendidas (eso exigirá la autorización de soporte del comprador).
@@ -11,7 +11,7 @@ unidades vendidas (eso exigirá la autorización de soporte del comprador).
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from app.api.dependencies import (
     ActorAdmin, ContenedorDep, IdAsignacion, IdModelo, IdUsuario, IdVehiculo,
@@ -19,7 +19,7 @@ from app.api.dependencies import (
 from app.api.documentacion import ADMIN_ESCRITURA, ADMIN_LECTURA, TAG_ADMIN
 from app.models.schemas import (
     AsignacionCrear, AsignacionFinalizar, AsignacionOut, AuditoriaOut,
-    CapacidadGuardar, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
+    CapacidadGuardar, CodigoRestablecimientoOut, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
     ModeloActualizar, ModeloCrear, ModeloOut, Pagina, UnidadActualizar,
     UnidadCrear, UnidadOut, UsuarioActualizar, UsuarioCrear, UsuarioOut,
 )
@@ -203,6 +203,21 @@ def actualizar_usuario(id_usuario: IdUsuario, cuerpo: UsuarioActualizar,
 
     **SP:** `sp_actualizar_usuario`, `sp_obtener_usuario`, `sp_registrar_auditoria`."""
     return contenedor.usuarios.actualizar(actor, id_usuario, cuerpo)
+
+
+@router.post("/usuarios/{id_usuario}/codigo-restablecimiento", status_code=201,
+             summary="Generar un código de restablecimiento (un solo uso)",
+             response_model=CodigoRestablecimientoOut, responses=ADMIN_ESCRITURA)
+def generar_codigo(id_usuario: IdUsuario, contenedor: ContenedorDep, actor: ActorAdmin,
+                   response: Response):
+    """Para dar la primera contraseña a un cliente nuevo o cuando la olvidó.
+    El código se muestra **una sola vez** (en la base solo queda su HMAC),
+    caduca en 30 min, admite 5 intentos e invalida los códigos anteriores.
+    Requiere la migración V010 y TOKEN_SECRETO.
+
+    **SP:** `sp_obtener_usuario`, `sp_codigo_crear`, `sp_registrar_auditoria`."""
+    response.headers["Cache-Control"] = "no-store"
+    return contenedor.auth.generar_codigo(actor, id_usuario)
 
 
 # ----------------------------------------------------------------- Asignaciones

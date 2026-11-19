@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter
 
 from app.api.dependencies import (
-    Administrador, ContenedorDep, IdVehiculo, Operador,
+    Administrador, ContenedorDep, IdVehiculo, LecturaUnidad, Operador,
 )
 from app.api.documentacion import BORRADO, ESCRITURA, LECTURA, TAG_VEHICULOS
 from app.core.exceptions import ConflictoNegocio
@@ -52,7 +52,8 @@ def crear_vehiculo(
     response_model=VehiculoDetalleOut,
     responses=LECTURA,
 )
-def obtener_vehiculo(id_vehiculo: IdVehiculo, contenedor: ContenedorDep):
+def obtener_vehiculo(id_vehiculo: IdVehiculo, contenedor: ContenedorDep,
+                     _lectura: LecturaUnidad):
     """Devuelve el vehículo con su catálogo de comandos, su último estado
     y sus DEMO.
 

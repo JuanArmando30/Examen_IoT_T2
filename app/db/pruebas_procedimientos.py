@@ -7,6 +7,7 @@ deben FALLAR) y borra todo lo que creó: las tablas originales deben quedar
 con el mismo número de registros.
 """
 
+import hashlib
 import json
 
 import mysql.connector
@@ -36,7 +37,7 @@ def _debe_fallar(funcion, errno, descripcion):
 def probar_v009(ex, base):
     ex.usar(base)
     antes = ex.conteos(base)
-    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] == 9, "sp_version_esquema no devuelve 9")
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 9, "sp_version_esquema debe ser 9 o más")
 
     # ---- Modelo y capacidades
     m = int(ex.llamar("sp_crear_modelo", ("Modelo de prueba V009", "prueba", "ESP32", 3000, 5000, 20, 60000))[0]["id_modelo"])
@@ -132,7 +133,120 @@ def probar_v009(ex, base):
     _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
 
 
+def _h(texto):
+    return hashlib.sha256(texto.encode()).hexdigest()
+
+
+def probar_v010(ex, base):
+    ex.usar(base)
+    antes = ex.conteos(base)
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] == 10, "sp_version_esquema no devuelve 10")
+    futuro = ex.valor("SELECT UTC_TIMESTAMP() + INTERVAL 1 DAY")
+    pasado_seguro = ex.valor("SELECT UTC_TIMESTAMP() + INTERVAL 2 SECOND")
+
+    u = int(ex.llamar("sp_crear_usuario", ("login.v010@prueba.local", "Login de prueba", "usuario"))[0]["id_usuario"])
+    a = int(ex.llamar("sp_crear_usuario", ("admin.v010@prueba.local", "Admin V010", "admin"))[0]["id_usuario"])
+
+    # ---- Login: hash visible solo para la API; bloqueo tras N fallos
+    fila = ex.llamar("sp_login_obtener", ("login.v010@prueba.local",))[0]
+    _afirmar(fila["hash_contrasena"] is None and fila["bloqueado"] == 0, f"sp_login_obtener: {fila}")
+    _afirmar(ex.llamar("sp_login_obtener", ("nadie@prueba.local",)) == [], "un correo inexistente no devuelve filas")
+    for _ in range(3):
+        ex.llamar("sp_login_resultado", (u, 0, 3, 15))
+    fila = ex.llamar("sp_login_obtener", ("login.v010@prueba.local",))[0]
+    _afirmar(fila["bloqueado"] == 1 and fila["intentos_fallidos"] == 0, f"3 fallos deben bloquear: {fila}")
+    ex.llamar("sp_login_resultado", (u, 1, 3, 15))
+    fila = ex.llamar("sp_login_obtener", ("login.v010@prueba.local",))[0]
+    _afirmar(fila["bloqueado"] == 0, "un acceso correcto desbloquea")
+    ex.llamar("sp_cambiar_contrasena", (u, "$argon2id$v=19$prueba"))
+    _afirmar(ex.llamar("sp_login_obtener", ("login.v010@prueba.local",))[0]["hash_contrasena"] == "$argon2id$v=19$prueba",
+             "sp_cambiar_contrasena")
+    _afirmar(ex.llamar("sp_obtener_usuario_auth", (u,))[0]["rol"] == "usuario", "sp_obtener_usuario_auth")
+
+    # ---- Tokens: rotación y detección de reutilización
+    ex.llamar("sp_token_crear", (u, _h("t1"), "f" * 32, futuro, "prueba"))
+    r = ex.llamar("sp_token_usar", (_h("t1"), _h("t2"), futuro, "prueba"))[0]
+    _afirmar(r["resultado"] == "ok" and r["id_usuario"] == u and r["rol"] == "usuario", f"rotación: {r}")
+    r = ex.llamar("sp_token_usar", (_h("t2"), _h("t3"), futuro, "prueba"))[0]
+    _afirmar(r["resultado"] == "ok", "el reemplazo sirve una vez")
+    r = ex.llamar("sp_token_usar", (_h("t1"), _h("t4"), futuro, "prueba"))[0]
+    _afirmar(r["resultado"] == "reutilizado" and r["id_usuario"] is None, f"reutilizar t1 debe detectarse: {r}")
+    r = ex.llamar("sp_token_usar", (_h("t3"), _h("t5"), futuro, "prueba"))[0]
+    _afirmar(r["resultado"] == "revocado", "tras la reutilización toda la familia queda revocada (t3 también)")
+    _afirmar(ex.llamar("sp_token_usar", (_h("nunca"), _h("x"), futuro, "prueba"))[0]["resultado"] == "invalido",
+             "token desconocido")
+    ex.llamar("sp_token_crear", (u, _h("s1"), "g" * 32, futuro, "prueba"))
+    ex.llamar("sp_token_revocar", (_h("s1"),))
+    _afirmar(ex.llamar("sp_token_usar", (_h("s1"), _h("s2"), futuro, "prueba"))[0]["resultado"] == "revocado",
+             "cerrar sesión revoca")
+    ex.llamar("sp_token_crear", (u, _h("e1"), "h" * 32, pasado_seguro, "prueba"))
+    ex.ejecutar("UPDATE tokens_renovacion SET expira_en = UTC_TIMESTAMP(), emitido_en = UTC_TIMESTAMP() - INTERVAL 1 MINUTE "
+                "WHERE hash_token = %s", (_h("e1"),))
+    _afirmar(ex.llamar("sp_token_usar", (_h("e1"), _h("e2"), futuro, "prueba"))[0]["resultado"] == "expirado",
+             "token expirado")
+    ex.llamar("sp_token_crear", (u, _h("i1"), "i" * 32, futuro, "prueba"))
+    ex.llamar("sp_actualizar_usuario", (u, "Login de prueba", "usuario", 0))            # desactivar revoca
+    _afirmar(ex.llamar("sp_token_usar", (_h("i1"), _h("i2"), futuro, "prueba"))[0]["resultado"] == "revocado",
+             "desactivar al usuario revoca sus sesiones")
+    ex.llamar("sp_actualizar_usuario", (u, "Login de prueba", "usuario", 1))
+
+    # ---- Código de restablecimiento: un solo uso, límite de intentos, el nuevo invalida al anterior
+    ex.llamar("sp_codigo_crear", (u, _h("c1"), a, futuro))
+    ex.llamar("sp_codigo_crear", (u, _h("c2"), None, futuro))                          # invalida c1
+    r = ex.llamar("sp_codigo_usar", ("login.v010@prueba.local", _h("c1"), "$argon2id$nueva", 3))[0]
+    _afirmar(r["resultado"] == "invalido", "el código anterior queda invalidado")
+    r = ex.llamar("sp_codigo_usar", ("login.v010@prueba.local", _h("c2"), "$argon2id$nueva", 3))[0]
+    _afirmar(r["resultado"] == "ok" and r["id_usuario"] == u, f"código válido: {r}")
+    _afirmar(ex.llamar("sp_codigo_usar", ("login.v010@prueba.local", _h("c2"), "$argon2id$otra", 3))[0]["resultado"]
+             == "invalido", "un código usado no sirve otra vez")
+    ex.llamar("sp_codigo_crear", (u, _h("c3"), a, futuro))
+    for esperado in ("invalido", "invalido", "agotado"):
+        r = ex.llamar("sp_codigo_usar", ("login.v010@prueba.local", _h("mal"), "$x", 3))[0]
+        _afirmar(r["resultado"] == esperado, f"intentos fallidos: se esperaba {esperado}, llegó {r}")
+    _afirmar(ex.llamar("sp_codigo_usar", ("login.v010@prueba.local", _h("c3"), "$x", 3))[0]["resultado"] == "invalido",
+             "un código agotado ya no sirve aunque sea el correcto")
+
+    # ---- Acceso por unidad e historial con autor
+    m = int(ex.llamar("sp_crear_modelo", ("Modelo V010", None, "ESP32", 3000, 5000, 20, 60000))[0]["id_modelo"])
+    ex.llamar("sp_guardar_capacidad", (m, "AVANZAR", 1, None, "movimiento", 1))
+    v = int(ex.llamar("sp_crear_unidad", (m, "Unidad V010", None, None, "inventario", 1))[0]["id_vehiculo"])
+    acceso = ex.llamar("sp_acceso_unidad", (u, v))[0]
+    _afirmar(acceso["es_propietario"] == 0 and acceso["soporte_vigente"] == 0, f"sin relación: {acceso}")
+    ex.llamar("sp_asignar_unidad", (v, u, a))
+    acceso = ex.llamar("sp_acceso_unidad", (u, v))[0]
+    _afirmar(acceso["es_propietario"] == 1 and acceso["estado_comercial"] == "vendida", f"propietario: {acceso}")
+    _afirmar(ex.llamar("sp_acceso_unidad", (a, v))[0]["soporte_vigente"] == 0, "sin soporte otorgado")
+    _debe_fallar(lambda: ex.llamar("sp_soporte_otorgar", (v, a, None, "x", futuro)), ERRNO_SIGNAL,
+                 "solo el comprador autoriza el soporte")
+    _debe_fallar(lambda: ex.llamar("sp_soporte_otorgar", (v, u, u, "x", futuro)), ERRNO_SIGNAL,
+                 "el soporte solo se otorga a un administrador")
+    ex.llamar("sp_soporte_otorgar", (v, u, a, "prueba", futuro))
+    _afirmar(ex.llamar("sp_acceso_unidad", (a, v))[0]["soporte_vigente"] == 1, "soporte vigente para ese admin")
+    _afirmar(ex.llamar("sp_soporte_listar", (v,))[0]["vigente"] == 1, "sp_soporte_listar")
+    _afirmar(ex.llamar("sp_soporte_revocar", (v, u))[0]["revocadas"] == 1, "sp_soporte_revocar")
+    _afirmar(ex.llamar("sp_acceso_unidad", (a, v))[0]["soporte_vigente"] == 0, "tras revocar ya no hay soporte")
+    _afirmar(ex.llamar("sp_acceso_unidad", (u, 999999)) == [], "unidad inexistente")
+    comando = ex.valor("SELECT id_comando FROM comandos WHERE id_vehiculo = %s AND codigo = 1", (v,))
+    ex.llamar("sp_registrar_historial_autor", (v, comando, "PRUEBA_V010", u, None))
+    _afirmar(ex.valor("SELECT id_usuario FROM historial_comandos WHERE id_vehiculo = %s", (v,)) == u,
+             "el historial guarda el autor")
+
+    # ---- Limpieza
+    ex.ejecutar("DELETE FROM autorizaciones_soporte WHERE id_vehiculo = %s", (v,))
+    ex.ejecutar("DELETE FROM asignaciones WHERE id_vehiculo = %s", (v,))
+    ex.llamar("sp_eliminar_vehiculo", (v,))
+    ex.ejecutar("DELETE FROM modelo_comandos WHERE id_modelo = %s", (m,))
+    ex.ejecutar("DELETE FROM modelos_vehiculo WHERE id_modelo = %s", (m,))
+    ex.ejecutar("DELETE FROM codigos_restablecimiento WHERE id_usuario IN (%s, %s)", (u, a))
+    ex.ejecutar("DELETE FROM tokens_renovacion WHERE id_usuario IN (%s, %s)", (u, a))
+    ex.ejecutar("DELETE FROM auditoria WHERE id_usuario IN (%s, %s)", (u, a))
+    ex.ejecutar("DELETE FROM usuarios WHERE id_usuario IN (%s, %s)", (u, a))
+    despues = ex.conteos(base)
+    _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
+
+
 # versión → función(ejecutor, base_de_la_copia)
 PRUEBAS = {
     "V009": probar_v009,
+    "V010": probar_v010,
 }

@@ -9,13 +9,19 @@ class MovimientoService:
     hace la capa API DESPUÉS de que esta transacción se confirmó.
     """
 
-    def __init__(self, repositorio, vehiculos, comandos):
+    def __init__(self, repositorio, vehiculos, comandos, esquema=None):
         self.repositorio = repositorio
         self.vehiculos = vehiculos
         self.comandos = comandos
+        self.esquema = esquema
+
+    def _con_autor(self, actor):
+        """Con V010 y un usuario identificado, el historial guarda quién movió."""
+        return (actor is not None and actor.id_usuario is not None
+                and self.esquema is not None and self.esquema.tiene_autenticacion())
 
     def registrar(self, id_vehiculo, id_comando=None, codigo=None,
-                  origen="API"):
+                  origen="API", actor=None):
         if id_comando is None and codigo is None:
             raise SolicitudInvalida("Indica id_comando o codigo.")
 
@@ -37,7 +43,11 @@ class MovimientoService:
             conectado = bool(actual["conectado"]) if actual else False
 
             tx.actualizar_estado(id_vehiculo, comando["id_comando"], conectado)
-            tx.registrar_historial(id_vehiculo, comando["id_comando"], origen)
+            if self._con_autor(actor):
+                tx.registrar_historial_autor(id_vehiculo, comando["id_comando"], origen,
+                                             actor.id_usuario, None)
+            else:
+                tx.registrar_historial(id_vehiculo, comando["id_comando"], origen)
         # <- COMMIT hecho. Recién ahora es seguro avisar por WebSocket.
 
         estado = self.repositorio.obtener_estado(id_vehiculo)

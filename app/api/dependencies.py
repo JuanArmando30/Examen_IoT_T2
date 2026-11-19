@@ -3,11 +3,13 @@
 from typing import Annotated, Optional
 
 from fastapi import Depends, HTTPException, Path, Request
-from fastapi.security import APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from app.contenedor import Contenedor
+from app.core.exceptions import NoAutorizado, Prohibido
 from app.core.security import ROL_ADMIN, ROL_OPERADOR, identificar_rol
 from app.services.administracion import Actor
+from app.services.auth_service import Principal
 
 esquema_api_key = APIKeyHeader(
     name="X-API-Key",
@@ -19,11 +21,40 @@ esquema_api_key = APIKeyHeader(
 )
 
 
+esquema_bearer = HTTPBearer(
+    auto_error=False,
+    description="Token de acceso de POST /auth/login (vigencia corta; se renueva con /auth/renovar).",
+)
+
+
 def obtener_contenedor(request: Request) -> Contenedor:
     return request.app.state.contenedor
 
 
 ContenedorDep = Annotated[Contenedor, Depends(obtener_contenedor)]
+ClaveDep = Annotated[Optional[str], Depends(esquema_api_key)]
+
+
+def principal_opcional(
+    contenedor: ContenedorDep,
+    credenciales: Annotated[Optional[HTTPAuthorizationCredentials], Depends(esquema_bearer)],
+) -> Optional[Principal]:
+    """Usuario del token Bearer; None si no se envió. Token inválido → 401."""
+    if credenciales is None:
+        return None
+    return contenedor.auth.principal_desde_token(credenciales.credentials)
+
+
+PrincipalOpcional = Annotated[Optional[Principal], Depends(principal_opcional)]
+
+
+def requiere_sesion(principal: PrincipalOpcional) -> Principal:
+    if principal is None:
+        raise NoAutorizado()
+    return principal
+
+
+Sesion = Annotated[Principal, Depends(requiere_sesion)]
 
 
 def obtener_rol(
@@ -88,19 +119,67 @@ Control = Annotated[str, Depends(requiere_control)]
 Administrador = Annotated[str, Depends(requiere_admin)]
 
 
-def actor_administrador(_rol: Administrador) -> Actor:
+def actor_administrador(
+    contenedor: ContenedorDep, clave: ClaveDep, principal: PrincipalOpcional,
+) -> Actor:
     """Quién hace una operación de ADMINISTRACIÓN.
 
-    Etapa 3 (transición): el administrador se identifica con la clave
-    X-API-Key de administrador y aún no hay cuenta de usuario
-    (id_usuario = None en la auditoría y en asignado_por).
-    Etapa 4: esta función devolverá el usuario del token de acceso, sin
-    cambiar las rutas.
+    - Token de un usuario con rol admin → su id queda en la auditoría.
+    - Token de otro rol → 403.
+    - Transición (hasta la Etapa 9): clave X-API-Key de administrador
+      (id_usuario = None).
     """
+    if principal is not None:
+        if not principal.es_admin:
+            raise Prohibido("Esta operación es solo para administradores.")
+        return principal.actor()
+    requiere_admin(identificar_rol(clave, contenedor.seguridad))
     return Actor(id_usuario=None, rol=ROL_ADMIN, via="clave")
 
 
+def autorizar_control_unidad(
+    id_vehiculo: Annotated[int, Path(gt=0)],
+    contenedor: ContenedorDep, clave: ClaveDep, principal: PrincipalOpcional,
+) -> Actor:
+    """CONTROL de UNA unidad (mover, iniciar/cancelar DEMO).
+
+    - Con token: autorización por unidad (dueño; admin según estado/soporte).
+    - Transición: clave X-API-Key válida, o sin nada si CONTROL_ABIERTO=true.
+    """
+    if principal is not None:
+        contenedor.auth.exigir_acceso_unidad(principal, id_vehiculo)
+        return principal.actor()
+    if clave:
+        rol = requiere_operador(identificar_rol(clave, contenedor.seguridad))
+        return Actor(id_usuario=None, rol=rol, via="clave")
+    if contenedor.seguridad.control_abierto:
+        return Actor(id_usuario=None, rol=ROL_OPERADOR, via="abierto")
+    raise NoAutorizado("Inicia sesión o envía la cabecera X-API-Key.")
+
+
+def autorizar_lectura_unidad(
+    id_vehiculo: Annotated[int, Path(gt=0)],
+    contenedor: ContenedorDep, clave: ClaveDep, principal: PrincipalOpcional,
+) -> None:
+    """Lectura de UNA unidad (estado, historial, comandos, DEMO).
+
+    Con LECTURA_ABIERTA=true (transición) cualquiera puede leer, como antes.
+    Con false: mismas reglas que el control, o una clave X-API-Key válida.
+    """
+    if contenedor.config_auth.lectura_abierta:          # con token no se lee MENOS que sin él
+        return
+    if principal is not None:
+        contenedor.auth.exigir_acceso_unidad(principal, id_vehiculo)
+        return
+    if clave:
+        requiere_operador(identificar_rol(clave, contenedor.seguridad))
+        return
+    raise NoAutorizado()
+
+
 ActorAdmin = Annotated[Actor, Depends(actor_administrador)]
+ControlUnidad = Annotated[Actor, Depends(autorizar_control_unidad)]
+LecturaUnidad = Annotated[None, Depends(autorizar_lectura_unidad)]
 IdModelo = Annotated[
     int, Path(gt=0, description="Identificador del modelo", examples=[1])
 ]

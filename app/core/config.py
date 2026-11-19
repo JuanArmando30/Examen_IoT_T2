@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 
 LONGITUD_MINIMA_CLAVE_API = 12
+LONGITUD_MINIMA_SECRETO = 32
 VERDADERO = {"1", "true", "si", "sí", "yes", "on"}
 
 # Origen del frontend publicado en GitHub Pages (solo esquema + dominio, sin ruta).
@@ -149,4 +150,56 @@ class SeguridadSettings:
             api_key_operador=operador,
             api_key_admin=admin,
             control_abierto=control_abierto,
+        )
+
+
+def _entero(nombre, defecto, minimo, maximo):
+    try:
+        valor = int(os.getenv(nombre, str(defecto)))
+    except ValueError as error:
+        raise ValueError(f"{nombre} debe ser un número entero.") from error
+    if not minimo <= valor <= maximo:
+        raise ValueError(f"{nombre} debe estar entre {minimo} y {maximo}.")
+    return valor
+
+
+@dataclass(frozen=True)
+class AuthSettings:
+    """Inicio de sesión (Etapa 4).
+
+    - TOKEN_SECRETO: firma los tokens de acceso (JWT HS256) y es la llave del
+      HMAC con que se guardan tokens de renovación y códigos. Si falta, las
+      rutas de sesión responden 503 y el resto de la API sigue funcionando.
+    - LECTURA_ABIERTA (transición, por defecto true): estado, historial y
+      DEMO se pueden leer sin sesión, como hasta ahora. Con false exigen
+      dueño, administrador (unidades no vendidas) o soporte autorizado.
+    """
+
+    secreto: str = field(repr=False, default="")
+    acceso_min: int = 10
+    renovacion_dias: int = 3
+    codigo_min: int = 30
+    max_intentos_login: int = 5
+    bloqueo_min: int = 15
+    max_intentos_codigo: int = 5
+    lectura_abierta: bool = True
+
+    @property
+    def configurado(self):
+        return len(self.secreto) >= LONGITUD_MINIMA_SECRETO
+
+    @classmethod
+    def from_env(cls):
+        secreto = os.getenv("TOKEN_SECRETO", "").strip()
+        claves = {os.getenv("API_KEY_OPERADOR", ""), os.getenv("API_KEY_ADMIN", "")}
+        if secreto and (len(secreto) < LONGITUD_MINIMA_SECRETO or secreto in claves):
+            raise ValueError(
+                f"TOKEN_SECRETO debe tener al menos {LONGITUD_MINIMA_SECRETO} caracteres "
+                "y ser distinto de las claves de la API."
+            )
+        return cls(
+            secreto=secreto,
+            acceso_min=_entero("TOKEN_ACCESO_MIN", 10, 1, 60),
+            renovacion_dias=_entero("TOKEN_RENOVACION_DIAS", 3, 1, 30),
+            lectura_abierta=os.getenv("LECTURA_ABIERTA", "true").strip().lower() in VERDADERO,
         )

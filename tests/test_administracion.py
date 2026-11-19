@@ -206,7 +206,9 @@ def test_las_rutas_previas_siguen_en_swagger(cliente):
     assert all(p in rutas for p in previas)
     operaciones = sum(len(v) for v in rutas.values())
     nuevas = sum(len(v) for k, v in rutas.items() if k.startswith("/admin"))
-    assert nuevas == 21 and operaciones == 28 + 21
+    sesion = sum(len(v) for k, v in rutas.items() if k.startswith(("/auth", "/mis-vehiculos")))
+    # Etapa 3: 21 de /admin · Etapa 4: +1 /admin (código) y 10 de sesión / mis vehículos
+    assert nuevas == 22 and sesion == 10 and operaciones == 28 + 22 + 10
 
 
 def test_repositorio_falso_no_v009_por_defecto_es_coherente():
