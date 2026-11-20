@@ -28,8 +28,11 @@ API local para gestionar un **vehículo IoT** (FastAPI + Amazon RDS).
 * **Autorización por unidad**: el comprador solo ve y opera SUS unidades;
   el administrador opera unidades en inventario/exhibición y una vendida
   solo con autorización de soporte vigente del comprador.
-* Transición (se retira en la Etapa 9): la cabecera `X-API-Key` sigue
-  aceptándose para escrituras y control; eliminar exige la de administrador.
+* **Tiempo real**: `POST /ws/ticket` y `wss://…/ws/vehiculos/{id}?ticket=…`;
+  el ESP32 se conecta con su credencial (cabecera `X-Dispositivo`).
+* Etapa 9: la clave `X-API-Key`, `CONTROL_ABIERTO`, `LECTURA_ABIERTA` y
+  `WS_ABIERTO` quedan **retirados por defecto** (se reactivan solo desde el
+  `.env` para volver atrás).
 * Con `CONTROL_ABIERTO=true` (en `.env`), **solo** mover, iniciar/cancelar
   DEMO y `GET /sesion` se aceptan sin clave; crear, editar y eliminar la
   siguen exigiendo.
@@ -75,7 +78,7 @@ def crear_app(fabrica_contenedor=Contenedor):
     app = FastAPI(
         title="API Vehículo IoT",
         description=DESCRIPCION,
-        version="1.3.0",
+        version="2.0.0",
         openapi_tags=ETIQUETAS,
         lifespan=lifespan,
     )

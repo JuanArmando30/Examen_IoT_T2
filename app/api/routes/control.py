@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.api.dependencies import Control, ContenedorDep
@@ -29,8 +29,14 @@ class SesionOut(BaseModel):
 
 
 @router.get("/control", include_in_schema=False)
-def panel_de_control():
-    """Pagina del control remoto (HTML estatico). No contiene claves."""
+def panel_de_control(contenedor: ContenedorDep):
+    """Pagina del control remoto (HTML estatico). No contiene claves.
+
+    Etapa 9: se retira junto con la clave X-API-Key (410). Vuelve con
+    CLAVE_API_HABILITADA=true."""
+    if not contenedor.seguridad.clave_habilitada:
+        return JSONResponse(status_code=410, content={
+            "detail": "El panel /control se retiró: usa la aplicación web (Control) con tu sesión."})
     return FileResponse(
         RUTA_PANEL, media_type="text/html; charset=utf-8", headers=CABECERAS
     )
@@ -39,7 +45,8 @@ def panel_de_control():
 @router.get(
     "/sesion",
     tags=[TAG_SISTEMA],
-    summary="Verificar la clave X-API-Key",
+    deprecated=True,
+    summary="Verificar la clave X-API-Key (retirada en la Etapa 9)",
     response_model=SesionOut,
     responses=R401,
 )

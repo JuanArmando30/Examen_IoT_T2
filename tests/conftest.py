@@ -534,9 +534,11 @@ class RepositorioFalso:
                 for a in self.asignaciones if a["id_usuario"] == id_usuario and a["hasta"] is None]
 
 
-def construir_cliente(repo, auth=None, control_abierto=False):
-    seguridad = SeguridadSettings(CLAVE_OPERADOR, CLAVE_ADMIN, control_abierto=control_abierto)
-    auth = auth or AuthSettings(secreto=SECRETO)
+def construir_cliente(repo, auth=None, control_abierto=False, clave_habilitada=True):
+    seguridad = SeguridadSettings(CLAVE_OPERADOR, CLAVE_ADMIN, control_abierto=control_abierto,
+                                  clave_habilitada=clave_habilitada)
+    # Las pruebas de etapas anteriores verifican también la transición: lectura y WS abiertos.
+    auth = auth or AuthSettings(secreto=SECRETO, lectura_abierta=True, ws_abierto=True)
     return TestClient(crear_app(lambda: Contenedor(repositorio=repo, seguridad=seguridad, auth=auth)))
 
 

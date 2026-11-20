@@ -6,6 +6,10 @@
 #   -ControlAbierto si   -> mover y DEMO sin clave (CONTROL_ABIERTO=true en .env)
 #   -ControlAbierto no   -> todo vuelve a pedir clave (CONTROL_ABIERTO=false)
 #   (sin -ControlAbierto no se toca ese valor)
+#   -Transicion cerrar   -> Etapa 9: retira la transición en el .env:
+#                           CLAVE_API_HABILITADA=false, CONTROL_ABIERTO=false,
+#                           LECTURA_ABIERTA=false y WS_ABIERTO=false
+#   -Transicion abrir    -> vuelve atrás (las cuatro en true), por si algo falla
 #
 # Que hace:
 #   1. Si la carpeta aun no es un repositorio git (antes se copiaban archivos), hace un
@@ -20,6 +24,7 @@ param(
     [string]$Repo = "https://github.com/JuanArmando30/Examen_IoT_T2.git",
     [string]$Rama = "main",
     [ValidateSet("", "si", "no")][string]$ControlAbierto = "",
+    [ValidateSet("", "cerrar", "abrir")][string]$Transicion = "",
     [string]$Tarea = "VehiculoAPI"
 )
 # "Continue": git escribe avisos normales en stderr; los errores reales se revisan con $LASTEXITCODE.
@@ -107,6 +112,35 @@ if ($ControlAbierto) {
     if ($actual) { Ok ("Sin cambios: CONTROL_ABIERTO=" + $actual.Matches[0].Groups[1].Value.Trim()) } else { Ok "Sin cambios: CONTROL_ABIERTO no definido (= false)" }
 }
 
+# --- 4b. Transición (Etapa 9) ------------------------------------------------------
+function Fijar-Variable($lineas, $nombre, $valor) {
+    if ($lineas -match "^\s*$nombre\s*=") {
+        return $lineas -replace "^\s*$nombre\s*=.*$", "$nombre=$valor"
+    }
+    return $lineas + "$nombre=$valor"
+}
+Paso "4b. Transición (CLAVE_API_HABILITADA, CONTROL_ABIERTO, LECTURA_ABIERTA, WS_ABIERTO)"
+if ($Transicion) {
+    $valorT = if ($Transicion -eq "abrir") { "true" } else { "false" }
+    $lineas = @(Get-Content $envFile)
+    foreach ($nombre in @("CLAVE_API_HABILITADA", "CONTROL_ABIERTO", "LECTURA_ABIERTA", "WS_ABIERTO")) {
+        $lineas = Fijar-Variable $lineas $nombre $valorT
+    }
+    [IO.File]::WriteAllLines($envFile, [string[]]$lineas, (New-Object Text.UTF8Encoding($false)))
+    if ($valorT -eq "false") {
+        Ok "Transición CERRADA: solo sesión (tokens), ticket en el WebSocket y credencial del ESP32"
+        Aviso "Antes de esto el ESP32 debe tener su credencial (secretos.h); si no, no recibe órdenes."
+    } else {
+        Aviso "Transición ABIERTA (vuelta atrás): clave, control, lectura y WebSocket sin credencial"
+    }
+} else {
+    foreach ($nombre in @("CLAVE_API_HABILITADA", "CONTROL_ABIERTO", "LECTURA_ABIERTA", "WS_ABIERTO")) {
+        $actual = (Select-String -Path $envFile -Pattern "^\s*$nombre\s*=\s*(.*)$" | Select-Object -First 1)
+        $texto = if ($actual) { $actual.Matches[0].Groups[1].Value.Trim() } else { "no definido (= false)" }
+        Write-Host "    $nombre = $texto"
+    }
+}
+
 # --- 5. Reiniciar la API ---------------------------------------------------------
 Paso "5. Reiniciar la API (tarea $Tarea)"
 if (-not (Get-ScheduledTask -TaskName $Tarea -ErrorAction SilentlyContinue)) {
@@ -136,10 +170,16 @@ if (-not $listo) {
 Ok "/health responde"
 try { $null = Invoke-RestMethod http://127.0.0.1:8000/health/db -TimeoutSec 8; Ok "/health/db: RDS disponible" } catch { Aviso "/health/db fallo: revisa RDS (no impide el arranque)" }
 try {
-    $s = Invoke-RestMethod http://127.0.0.1:8000/sesion -TimeoutSec 3
-    Ok "Control ABIERTO: mover y DEMO sin clave (crear/editar/eliminar siguen pidiendo clave) -> $($s | ConvertTo-Json -Compress)"
+    $null = Invoke-RestMethod http://127.0.0.1:8000/vehiculos/1/historial -TimeoutSec 3
+    Aviso "Lectura ABIERTA: el historial se lee sin sesión (transición)"
 } catch {
-    Ok "Control CERRADO: todo pide la clave X-API-Key (GET /sesion sin clave = 401)"
+    Ok "Lectura CERRADA: el historial exige sesión (401 sin token)"
+}
+try {
+    $null = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/control -TimeoutSec 3
+    Aviso "Panel /control disponible (clave X-API-Key habilitada: transición)"
+} catch {
+    Ok "Panel /control retirado (410)"
 }
 Write-Host ""
 Write-Host "Listo. Prueba publica: https://vehiculos-juan.duckdns.org/health" -ForegroundColor Green

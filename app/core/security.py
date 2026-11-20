@@ -4,6 +4,12 @@ import secrets
 from typing import Optional
 
 from app.core.config import SeguridadSettings
+from app.core.exceptions import NoAutorizado
+
+MENSAJE_CLAVE_RETIRADA = (
+    "La clave X-API-Key se retiró: inicia sesión con tu cuenta (Administración) "
+    "y usa el token de acceso."
+)
 
 ROL_OPERADOR = "operador"
 ROL_ADMIN = "admin"
@@ -18,10 +24,17 @@ def identificar_rol(
     clave: Optional[str],
     settings: SeguridadSettings,
 ) -> Optional[str]:
-    """Devuelve el rol asociado a la clave o None si no es válida."""
+    """Devuelve el rol asociado a la clave o None si no es válida.
+
+    Con la clave retirada (CLAVE_API_HABILITADA=false), enviarla responde 401
+    con un mensaje que indica qué hacer en su lugar.
+    """
 
     if not clave:
         return None
+
+    if not settings.clave_habilitada:
+        raise NoAutorizado(MENSAJE_CLAVE_RETIRADA)
 
     if _coinciden(clave, settings.api_key_admin):
         return ROL_ADMIN

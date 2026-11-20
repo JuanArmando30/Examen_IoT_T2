@@ -93,7 +93,7 @@ def requiere_operador(rol: RolDep) -> str:
     if rol is None:
         raise HTTPException(
             status_code=401,
-            detail="Falta la cabecera X-API-Key o la clave no es válida.",
+            detail="Inicia sesión (token de acceso) para esta operación.",
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
@@ -108,7 +108,7 @@ def requiere_admin(rol: RolDep) -> str:
     if rol != ROL_ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="Esta operación requiere la clave de administrador.",
+            detail="Esta operación es solo para administradores.",
         )
 
     return rol
@@ -180,7 +180,7 @@ def autorizar_control_unidad(
         return Actor(id_usuario=None, rol=rol, via="clave")
     if contenedor.seguridad.control_abierto:
         return Actor(id_usuario=None, rol=ROL_OPERADOR, via="abierto")
-    raise NoAutorizado("Inicia sesión o envía la cabecera X-API-Key.")
+    raise NoAutorizado("Inicia sesión para controlar la unidad (o reserva la de exhibición como invitado).")
 
 
 def autorizar_lectura_unidad(

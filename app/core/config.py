@@ -94,25 +94,34 @@ class Settings:
 
 @dataclass(frozen=True)
 class SeguridadSettings:
-    """Claves de acceso a la API (autenticación por cabecera X-API-Key).
+    """Claves de acceso a la API (cabecera X-API-Key) — mecanismo de TRANSICIÓN.
 
-    - API_KEY_OPERADOR: permite operaciones de escritura y control.
-    - API_KEY_ADMIN: además permite operaciones destructivas (eliminar).
-    - CONTROL_ABIERTO (opcional, por defecto false): si es true, las
-      operaciones de CONTROL (mover, iniciar/cancelar DEMO y GET /sesion)
-      se aceptan SIN clave. Crear, editar y eliminar siguen exigiendo la
-      clave de operador o de administrador. Una clave incorrecta sigue
-      respondiendo 401.
+    Etapa 9: la autenticación es con sesión (tokens). La clave queda
+    RETIRADA por defecto y solo se acepta con CLAVE_API_HABILITADA=true
+    (para volver atrás si hiciera falta).
+
+    - CLAVE_API_HABILITADA (por defecto false): con true se aceptan
+      API_KEY_OPERADOR (escrituras y control) y API_KEY_ADMIN (además
+      eliminar), y entonces ambas son obligatorias.
+    - CONTROL_ABIERTO (por defecto false): con true, mover e iniciar o
+      cancelar DEMO se aceptan sin credencial (transición).
     """
 
     api_key_operador: str = field(repr=False)
     api_key_admin: str = field(repr=False)
     control_abierto: bool = False
+    clave_habilitada: bool = True
 
     @classmethod
     def from_env(cls):
         operador = os.getenv("API_KEY_OPERADOR", "")
         admin = os.getenv("API_KEY_ADMIN", "")
+        habilitada = os.getenv("CLAVE_API_HABILITADA", "false").strip().lower() in VERDADERO
+        control_abierto = os.getenv("CONTROL_ABIERTO", "false").strip().lower() in VERDADERO
+        if not habilitada:
+            # Retirada: las claves ya no hacen falta (si siguen en el .env, se ignoran).
+            return cls(api_key_operador=operador, api_key_admin=admin,
+                       control_abierto=control_abierto, clave_habilitada=False)
 
         faltantes = [
             nombre
@@ -144,12 +153,11 @@ class SeguridadSettings:
                 "API_KEY_OPERADOR y API_KEY_ADMIN deben ser distintas."
             )
 
-        control_abierto = os.getenv("CONTROL_ABIERTO", "false").strip().lower() in VERDADERO
-
         return cls(
             api_key_operador=operador,
             api_key_admin=admin,
             control_abierto=control_abierto,
+            clave_habilitada=True,
         )
 
 
@@ -170,13 +178,12 @@ class AuthSettings:
     - TOKEN_SECRETO: firma los tokens de acceso (JWT HS256) y es la llave del
       HMAC con que se guardan tokens de renovación y códigos. Si falta, las
       rutas de sesión responden 503 y el resto de la API sigue funcionando.
-    - LECTURA_ABIERTA (transición, por defecto true): estado, historial y
-      DEMO se pueden leer sin sesión, como hasta ahora. Con false exigen
+    - LECTURA_ABIERTA (transición; por defecto FALSE desde la Etapa 9):
+      con true, estado, historial y DEMO se leen sin sesión. Con false exigen
       dueño, administrador (unidades no vendidas) o soporte autorizado.
-    - WS_ABIERTO (transición, por defecto true): el WebSocket acepta
-      conexiones sin ticket ni credencial, como hasta ahora (lo usa el
-      firmware anterior). Con false: navegadores con ticket de un solo uso
-      y el ESP32 con su credencial (cabecera X-Dispositivo).
+    - WS_ABIERTO (transición; por defecto FALSE desde la Etapa 9): con true
+      el WebSocket acepta conexiones sin ticket ni credencial. Con false:
+      navegadores con ticket de un solo uso y el ESP32 con su credencial.
     """
 
     secreto: str = field(repr=False, default="")
@@ -196,7 +203,7 @@ class AuthSettings:
     @classmethod
     def from_env(cls):
         secreto = os.getenv("TOKEN_SECRETO", "").strip()
-        claves = {os.getenv("API_KEY_OPERADOR", ""), os.getenv("API_KEY_ADMIN", "")}
+        claves = {os.getenv("API_KEY_OPERADOR", ""), os.getenv("API_KEY_ADMIN", "")} - {""}
         if secreto and (len(secreto) < LONGITUD_MINIMA_SECRETO or secreto in claves):
             raise ValueError(
                 f"TOKEN_SECRETO debe tener al menos {LONGITUD_MINIMA_SECRETO} caracteres "
@@ -206,6 +213,6 @@ class AuthSettings:
             secreto=secreto,
             acceso_min=_entero("TOKEN_ACCESO_MIN", 10, 1, 60),
             renovacion_dias=_entero("TOKEN_RENOVACION_DIAS", 3, 1, 30),
-            lectura_abierta=os.getenv("LECTURA_ABIERTA", "true").strip().lower() in VERDADERO,
-            ws_abierto=os.getenv("WS_ABIERTO", "true").strip().lower() in VERDADERO,
+            lectura_abierta=os.getenv("LECTURA_ABIERTA", "false").strip().lower() in VERDADERO,
+            ws_abierto=os.getenv("WS_ABIERTO", "false").strip().lower() in VERDADERO,
         )
