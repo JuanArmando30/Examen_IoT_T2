@@ -467,6 +467,47 @@ def probar_v013(ex, base):
     _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
 
 
+def probar_v014(ex, base):
+    ex.usar(base)
+    antes = ex.conteos(base)
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 14, "sp_version_esquema debe ser 14 o más")
+    ex.llamar("sp_invitado_cerrar_todas", ("detenida",))
+    m = int(ex.llamar("sp_crear_modelo", ("Modelo V014", None, "ESP32", 3000, 5000, 10, 60000))[0]["id_modelo"])
+    ve = int(ex.llamar("sp_crear_unidad", (m, "Exhibición V014", None, None, "exhibicion", 1))[0]["id_vehiculo"])
+    h = lambda t: hashlib.sha256(f"v014-{t}".encode()).hexdigest()   # noqa: E731
+    red_a, red_b = h("red-a"), h("red-b")
+    n = iter(range(100))
+
+    def reservar(red, por_hora=10):
+        return ex.llamar("sp_invitado_reservar", (ve, h(f"t{next(n)}"), red, 5, por_hora, 10))[0]
+
+    r = reservar(red_a)
+    _afirmar(r["resultado"] == "ok", f"primera reserva: {r}")
+    _afirmar(reservar(red_a)["resultado"] == "propia", "la misma red ve su propia reserva, no «ocupada»")
+    _afirmar(reservar(red_b)["resultado"] == "ocupada", "otra red: ocupada")
+
+    # Terminó por desconexión / reinicio / empresa → sin espera
+    for motivo in ("desconexion", "detenida", "admin"):
+        ex.llamar("sp_invitado_finalizar", (r["id_reserva"], motivo))
+        r = reservar(red_a)
+        _afirmar(r["resultado"] == "ok", f"tras «{motivo}» se puede volver a reservar enseguida: {r}")
+
+    # La usó o la cerró el visitante → espera de 10 min
+    ex.llamar("sp_invitado_finalizar", (r["id_reserva"], "cancelada"))
+    e = reservar(red_a)
+    _afirmar(e["resultado"] == "enfriamiento" and e["segundos"] > 500, f"tras «cancelada» hay espera: {e}")
+    # El límite por hora sigue contando todas
+    _afirmar(reservar(red_a, por_hora=4)["resultado"] == "limite", "el límite por hora cuenta todas las reservas")
+
+    ex.ejecutar("DELETE r FROM reservas_exhibicion r JOIN sesiones_invitado s ON s.id_sesion = r.id_sesion "
+                "WHERE s.red_hash IN (%s, %s)", (red_a, red_b))
+    ex.ejecutar("DELETE FROM sesiones_invitado WHERE red_hash IN (%s, %s)", (red_a, red_b))
+    ex.llamar("sp_eliminar_vehiculo", (ve,))
+    ex.ejecutar("DELETE FROM modelos_vehiculo WHERE id_modelo = %s", (m,))
+    despues = ex.conteos(base)
+    _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
+
+
 # versión → función(ejecutor, base_de_la_copia)
 PRUEBAS = {
     "V009": probar_v009,
@@ -474,4 +515,5 @@ PRUEBAS = {
     "V011": probar_v011,
     "V012": probar_v012,
     "V013": probar_v013,
+    "V014": probar_v014,
 }

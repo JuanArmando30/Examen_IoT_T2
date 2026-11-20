@@ -32,7 +32,8 @@ VERSION_AUTENTICACION = 10
 VERSION_DEMOS_PRIVADAS = 11
 VERSION_INVITADOS = 12
 VERSION_DISPOSITIVO = 13
-VERSION_MAS_RECIENTE = VERSION_DISPOSITIVO        # deja de consultarse al alcanzarla
+VERSION_RESERVA_JUSTA = 14                        # V014: sin espera tras una desconexión
+VERSION_MAS_RECIENTE = VERSION_RESERVA_JUSTA      # deja de consultarse al alcanzarla
 ESTADOS = ("inventario", "vendida", "exhibicion", "baja")
 _PATRON_CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 

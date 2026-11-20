@@ -34,7 +34,7 @@ def _ahora():
 class RepositorioFalso:
     """Lo mínimo de cada SP para probar rutas y servicios."""
 
-    def __init__(self, con_v009=True, version=13):
+    def __init__(self, con_v009=True, version=14):
         self.con_v009 = con_v009
         self.version = version
         self.llamadas = []
@@ -167,11 +167,14 @@ class RepositorioFalso:
             return {"resultado": "no_disponible", "segundos": 0}
         viva = next((r for r in self.reservas if r["id_vehiculo"] == id_vehiculo and r["fin"] is None), None)
         if viva:
-            return {"resultado": "ocupada", "segundos": int((viva["expira"] - ahora).total_seconds())}
+            return {"resultado": "propia" if viva["red"] == red else "ocupada",
+                    "segundos": int((viva["expira"] - ahora).total_seconds())}
         mias = [r for r in self.reservas if r["red"] == red]
         if len([r for r in mias if r["inicio"] > ahora - timedelta(hours=1)]) >= por_hora:
             return {"resultado": "limite", "segundos": 3600}
-        ultima = max((r["fin"] or r["expira"] for r in mias), default=None)
+        # V014: la espera solo cuenta las reservas que el visitante usó o cerró
+        ultima = max((r["fin"] or r["expira"] for r in mias
+                      if r["motivo"] in (None, "expirada", "cancelada")), default=None)
         if ultima and ultima + timedelta(minutes=enfriamiento_min) > ahora:
             return {"resultado": "enfriamiento", "segundos": int((ultima + timedelta(minutes=enfriamiento_min) - ahora).total_seconds())}
         i = len(self.reservas) + 1

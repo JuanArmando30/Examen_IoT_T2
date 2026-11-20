@@ -158,3 +158,19 @@ def test_sin_v012_el_catalogo_da_503(repo, cliente):
     repo.version = 11
     cliente.app.state.contenedor.esquema._version = None
     assert cliente.get("/invitado/catalogo").status_code == 503
+
+
+def test_reserva_propia_y_sin_espera_tras_desconexion(repo, cliente):
+    """V014: la misma red ve «tu reserva» (no «ocupada») y una desconexión no castiga con espera."""
+    ve, uv, admin, _ = _escenario(repo, cliente)
+    _abrir(cliente, ve, admin)
+    servicio = cliente.app.state.contenedor.invitados
+    token = _reservar(cliente, ve).json()["token_invitado"]
+    r = _reservar(cliente, ve)                                          # otra pestaña, misma red
+    assert r.status_code == 409 and "Ya tienes una reserva" in r.json()["detail"]
+    # El token sigue sirviendo (p. ej., tras recargar la página se reanuda con él)
+    assert cliente.get("/invitado/estado", headers=_inv(token)).status_code == 200
+    servicio._activas[ve].ultimo_latido -= 100                         # cerró la pestaña
+    assert _esperar(lambda: ve not in servicio._activas)
+    assert repo.reservas[-1]["motivo"] == "desconexion"
+    assert _reservar(cliente, ve).status_code == 201                    # sin los 10 min de espera

@@ -643,7 +643,7 @@ class ReservaOut(BaseModel):
 
 
 class ReservaCreadaOut(ReservaOut):
-    token_invitado: str = Field(description="Guárdalo SOLO en memoria; se manda en la cabecera X-Invitado.")
+    token_invitado: str = Field(description="Guárdalo solo en la pestaña (memoria o sessionStorage, nunca localStorage); se manda en la cabecera X-Invitado.")
 
 
 class LatidoOut(BaseModel):

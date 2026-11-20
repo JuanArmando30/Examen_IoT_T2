@@ -138,6 +138,10 @@ class InvitadoService:
             r = await asyncio.to_thread(self.repositorio.invitado_reservar, id_vehiculo, huella, red,
                                         MINUTOS_RESERVA, MAX_RESERVAS_POR_HORA, ENFRIAMIENTO_MIN)
             resultado = r.get("resultado")
+            if resultado == "propia":
+                raise ConflictoNegocio(
+                    "Ya tienes una reserva activa (en otra pestaña o ventana). Vuelve a ella; "
+                    f"si la cerraste, se libera sola en unos segundos (termina en {_mmss(r.get('segundos') or 0)}).")
             if resultado == "ocupada":
                 raise ConflictoNegocio(f"La unidad está reservada por otro visitante. Se libera en {_mmss(r.get('segundos') or 0)}.")
             if resultado in ("limite", "enfriamiento"):
