@@ -34,7 +34,7 @@ def _ahora():
 class RepositorioFalso:
     """Lo mínimo de cada SP para probar rutas y servicios."""
 
-    def __init__(self, con_v009=True, version=12):
+    def __init__(self, con_v009=True, version=13):
         self.con_v009 = con_v009
         self.version = version
         self.llamadas = []
@@ -50,7 +50,7 @@ class RepositorioFalso:
         self._ids = {"modelo": 0, "vehiculo": 1, "usuario": 0, "asignacion": 0, "demo": 0}
         self.tokens, self.codigos, self.soportes, self.historial_autor = {}, [], [], []
         self.estados = {}
-        self.demos, self.pasos, self.reservas = {}, {}, []
+        self.demos, self.pasos, self.reservas, self.credenciales = {}, {}, [], []
 
     def _nuevo(self, tipo):
         self._ids[tipo] += 1
@@ -206,6 +206,37 @@ class RepositorioFalso:
         return [{"id_comando": c["id_comando"], "nombre": c["nombre"], "codigo": c["codigo"],
                  "tipo": permitidos[c["codigo"]]["tipo"]}
                 for c in self.comandos.get(id_vehiculo, []) if c["activo"] and c["codigo"] in permitidos]
+
+    # ---------------- V013 (dispositivo) ----------------
+    def dispositivo_crear(self, id_vehiculo, huella):
+        for c in self.credenciales:
+            if c["id_vehiculo"] == id_vehiculo and c["revocada_en"] is None:
+                c["revocada_en"] = _ahora()
+        i = len(self.credenciales) + 1
+        self.credenciales.append({"id_credencial": i, "id_vehiculo": id_vehiculo, "huella": huella,
+                                  "creada_en": _ahora(), "ultimo_uso": None, "revocada_en": None})
+        return i
+
+    def dispositivo_validar(self, huella):
+        c = next((c for c in self.credenciales if c["huella"] == huella and c["revocada_en"] is None), None)
+        if c is None:
+            return None
+        c["ultimo_uso"] = _ahora()
+        return {"id_credencial": c["id_credencial"], "id_vehiculo": c["id_vehiculo"]}
+
+    def dispositivo_revocar(self, id_vehiculo):
+        n = 0
+        for c in self.credenciales:
+            if c["id_vehiculo"] == id_vehiculo and c["revocada_en"] is None:
+                c["revocada_en"], n = _ahora(), n + 1
+        return n
+
+    def dispositivo_estado(self, id_vehiculo):
+        mias = [c for c in self.credenciales if c["id_vehiculo"] == id_vehiculo]
+        if not mias:
+            return None
+        c = mias[-1]
+        return {**c, "vigente": c["revocada_en"] is None}
 
     def eliminar_vehiculo(self, id_vehiculo):
         self._anotar("sp_eliminar_vehiculo")

@@ -1,8 +1,8 @@
 """Capa de acceso a los procedimientos almacenados de vehiculo_iot.
 
 Los 21 originales (prácticas 2.3/2.4), los 25 de ADMINISTRACIÓN (V009),
-los 14 de AUTENTICACIÓN (V010), los 3 de DEMO PRIVADAS (V011) y los 6 de
-INVITADOS (V012).
+los 14 de AUTENTICACIÓN (V010), los 3 de DEMO PRIVADAS (V011), los 6 de
+INVITADOS (V012) y los 4 del DISPOSITIVO (V013).
 Responsabilidad única: ejecutar SP con parámetros enlazados y devolver
 filas como diccionarios. Aquí NO hay reglas de negocio (eso vive en
 app/services) ni código HTTP.
@@ -124,10 +124,16 @@ PROCEDIMIENTOS_V012_LECTURA = frozenset({"sp_catalogo_exhibicion", "sp_invitado_
 PROCEDIMIENTOS_V012_ESCRITURA = frozenset({"sp_invitado_reservar", "sp_invitado_finalizar", "sp_invitado_cerrar_todas"})
 PROCEDIMIENTOS_V012 = PROCEDIMIENTOS_V012_LECTURA | PROCEDIMIENTOS_V012_ESCRITURA
 
+# --- V013 · Credencial del dispositivo -------------------------------------
+
+PROCEDIMIENTOS_V013_LECTURA = frozenset({"sp_dispositivo_estado"})
+PROCEDIMIENTOS_V013_ESCRITURA = frozenset({"sp_dispositivo_crear", "sp_dispositivo_validar", "sp_dispositivo_revocar"})
+PROCEDIMIENTOS_V013 = PROCEDIMIENTOS_V013_LECTURA | PROCEDIMIENTOS_V013_ESCRITURA
+
 PROCEDIMIENTOS_NUEVOS = (PROCEDIMIENTOS_V009_LECTURA | PROCEDIMIENTOS_V009_ESCRITURA
-                         | PROCEDIMIENTOS_V010 | PROCEDIMIENTOS_V011 | PROCEDIMIENTOS_V012)
+                         | PROCEDIMIENTOS_V010 | PROCEDIMIENTOS_V011 | PROCEDIMIENTOS_V012 | PROCEDIMIENTOS_V013)
 _ESCRITURA = (PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA | PROCEDIMIENTOS_V010_ESCRITURA
-              | PROCEDIMIENTOS_V011_ESCRITURA | PROCEDIMIENTOS_V012_ESCRITURA)
+              | PROCEDIMIENTOS_V011_ESCRITURA | PROCEDIMIENTOS_V012_ESCRITURA | PROCEDIMIENTOS_V013_ESCRITURA)
 PROCEDIMIENTOS_PERMITIDOS = PROCEDIMIENTOS_ORIGINALES | PROCEDIMIENTOS_NUEVOS
 
 # Errores de MySQL que significan "no hay conexión / sin acceso".
@@ -598,6 +604,24 @@ class _ProcedimientosSP:
 
     def comandos_invitado(self, id_vehiculo):
         return self._llamar("sp_comandos_invitado", (id_vehiculo,))
+
+    # ================= V013 · DISPOSITIVO =================
+
+    def dispositivo_crear(self, id_vehiculo, hash_secreto):
+        return _id_creado(self._llamar("sp_dispositivo_crear", (id_vehiculo, hash_secreto)), "id_credencial")
+
+    def dispositivo_validar(self, hash_secreto):
+        """{id_credencial, id_vehiculo} de un secreto vigente, o None."""
+        registros = self._llamar("sp_dispositivo_validar", (hash_secreto,))
+        return registros[0] if registros else None
+
+    def dispositivo_revocar(self, id_vehiculo):
+        registros = self._llamar("sp_dispositivo_revocar", (id_vehiculo,))
+        return int(registros[0]["revocadas"]) if registros else 0
+
+    def dispositivo_estado(self, id_vehiculo):
+        registros = self._llamar("sp_dispositivo_estado", (id_vehiculo,))
+        return registros[0] if registros else None
 
 
 class TransaccionSP(_ProcedimientosSP):

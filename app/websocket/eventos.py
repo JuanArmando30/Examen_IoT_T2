@@ -129,5 +129,12 @@ def error(id_vehiculo, codigo_error, detalle, id_demo=None):
     )
 
 
+def reporte_dispositivo(id_vehiculo, codigo, accion, duracion_ms=None, motivo=None):
+    """Lo que la UNIDAD dice que hizo (ejecutando / detenido / ignorado). No es el acuse de la API."""
+    return construir("reporte_dispositivo", id_vehiculo, codigo=codigo, datos={
+        "accion": accion, "duracion_ms": duracion_ms, "motivo": motivo,
+    })
+
+
 def pong(id_vehiculo):
     return construir(PONG, id_vehiculo)

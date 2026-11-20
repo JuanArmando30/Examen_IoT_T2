@@ -15,6 +15,7 @@ from app.services.administracion import (
     UsuarioService,
 )
 from app.services.auth_service import AuthService
+from app.services.canal_service import CanalService
 from app.services.comando_service import ComandoService
 from app.services.demo_ejecutor import DemoEjecutor
 from app.services.demo_service import DemoService
@@ -80,6 +81,12 @@ class Contenedor:
         self.invitados = InvitadoService(
             self.repositorio, self.esquema, self.auditoria, self.config_auth, self.comandos,
             self.movimientos, self.demos, self.demo_ejecutor, self.gestor_ws,
+        )
+
+        # ---- Canal en tiempo real por unidad (Etapa 8) ----
+        self.canal = CanalService(
+            self.repositorio, self.esquema, self.auditoria, self.config_auth, self.seguridad,
+            self.auth, self.invitados, self.estados, self.gestor_ws,
         )
 
     def verificar_base_datos(self):

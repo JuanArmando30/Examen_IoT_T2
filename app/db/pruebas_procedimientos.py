@@ -429,10 +429,49 @@ def probar_v012(ex, base):
     _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
 
 
+def probar_v013(ex, base):
+    ex.usar(base)
+    antes = ex.conteos(base)
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 13, "sp_version_esquema debe ser 13 o más")
+    m = int(ex.llamar("sp_crear_modelo", ("Modelo V013", None, "ESP32", 3000, 5000, 10, 60000))[0]["id_modelo"])
+    v = int(ex.llamar("sp_crear_unidad", (m, "Unidad V013", None, None, "inventario", 1))[0]["id_vehiculo"])
+    v2 = int(ex.llamar("sp_crear_unidad", (m, "Otra V013", None, None, "inventario", 1))[0]["id_vehiculo"])
+    h = lambda t: hashlib.sha256(f"v013-{t}".encode()).hexdigest()   # noqa: E731
+
+    _afirmar(ex.llamar("sp_dispositivo_estado", (v,)) == [], "sin credencial al inicio")
+    _debe_fallar(lambda: ex.llamar("sp_dispositivo_crear", (999999, h("x"))), ERRNO_SIGNAL, "unidad inexistente")
+    c1 = int(ex.llamar("sp_dispositivo_crear", (v, h("a")))[0]["id_credencial"])
+    valida = ex.llamar("sp_dispositivo_validar", (h("a"),))
+    _afirmar(len(valida) == 1 and valida[0]["id_vehiculo"] == v, f"validar: {valida}")
+    _afirmar(ex.valor("SELECT ultimo_uso IS NOT NULL FROM credenciales_dispositivo WHERE id_credencial = %s", (c1,)) == 1,
+             "validar marca el último uso")
+    _afirmar(ex.llamar("sp_dispositivo_validar", (h("nada"),)) == [], "un secreto desconocido no valida")
+
+    # Una nueva credencial revoca la anterior (una vigente por unidad)
+    c2 = int(ex.llamar("sp_dispositivo_crear", (v, h("b")))[0]["id_credencial"])
+    _afirmar(ex.llamar("sp_dispositivo_validar", (h("a"),)) == [], "la credencial anterior ya no sirve")
+    est = ex.llamar("sp_dispositivo_estado", (v,))[0]
+    _afirmar(est["id_credencial"] == c2 and est["vigente"] == 1, f"estado: {est}")
+    _debe_fallar(lambda: ex.llamar("sp_dispositivo_crear", (v2, h("b"))), 1062, "el mismo secreto no sirve para otra unidad")
+
+    _afirmar(ex.llamar("sp_dispositivo_revocar", (v,))[0]["revocadas"] == 1, "revocar")
+    _afirmar(ex.llamar("sp_dispositivo_validar", (h("b"),)) == [], "revocada no valida")
+    _afirmar(ex.llamar("sp_dispositivo_estado", (v,))[0]["vigente"] == 0, "estado tras revocar")
+    _afirmar(ex.llamar("sp_dispositivo_revocar", (v,))[0]["revocadas"] == 0, "revocar dos veces")
+
+    ex.ejecutar("DELETE FROM credenciales_dispositivo WHERE id_vehiculo IN (%s, %s)", (v, v2))
+    ex.llamar("sp_eliminar_vehiculo", (v,))
+    ex.llamar("sp_eliminar_vehiculo", (v2,))
+    ex.ejecutar("DELETE FROM modelos_vehiculo WHERE id_modelo = %s", (m,))
+    despues = ex.conteos(base)
+    _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
+
+
 # versión → función(ejecutor, base_de_la_copia)
 PRUEBAS = {
     "V009": probar_v009,
     "V010": probar_v010,
     "V011": probar_v011,
     "V012": probar_v012,
+    "V013": probar_v013,
 }

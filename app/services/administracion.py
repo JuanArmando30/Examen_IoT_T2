@@ -31,7 +31,8 @@ VERSION_ADMINISTRACION = 9
 VERSION_AUTENTICACION = 10
 VERSION_DEMOS_PRIVADAS = 11
 VERSION_INVITADOS = 12
-VERSION_MAS_RECIENTE = VERSION_INVITADOS          # deja de consultarse al alcanzarla
+VERSION_DISPOSITIVO = 13
+VERSION_MAS_RECIENTE = VERSION_DISPOSITIVO        # deja de consultarse al alcanzarla
 ESTADOS = ("inventario", "vendida", "exhibicion", "baja")
 _PATRON_CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 
@@ -96,6 +97,16 @@ class EsquemaBD:
 
     def tiene_autenticacion(self):
         return self.version() >= VERSION_AUTENTICACION
+
+    def tiene_dispositivo(self):
+        return self.version() >= VERSION_DISPOSITIVO
+
+    def exigir_dispositivo(self):
+        if not self.tiene_dispositivo():
+            raise EsquemaPendiente(
+                "La base aún no tiene la migración V013 (credencial del dispositivo). "
+                "Aplícala con: python -m app.db.migrar aplicar --respaldo <snapshot>."
+            )
 
     def tiene_invitados(self):
         return self.version() >= VERSION_INVITADOS

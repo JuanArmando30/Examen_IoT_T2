@@ -63,9 +63,12 @@ def crear_app(fabrica_contenedor=Contenedor):
 
         # Reservas de invitado: cierra las previas y arranca el vigilante (caducidad / desconexión).
         await app.state.contenedor.invitados.iniciar()
+        # Revalidación periódica de las suscripciones WebSocket (permisos que cambian).
+        await app.state.contenedor.canal.iniciar()
 
         yield
 
+        await app.state.contenedor.canal.cerrar()
         await app.state.contenedor.invitados.cerrar()
         await app.state.contenedor.demo_ejecutor.cerrar()
 
@@ -85,6 +88,7 @@ def crear_app(fabrica_contenedor=Contenedor):
         allow_origins=origenes_cors(),
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Invitado"],
+        # (X-Dispositivo no: solo lo usa el ESP32, nunca un navegador)
         allow_credentials=False,
         max_age=600,
     )

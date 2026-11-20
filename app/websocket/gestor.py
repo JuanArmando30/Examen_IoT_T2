@@ -15,8 +15,9 @@ class ClienteWS:
     (por ejemplo, un evento de DEMO y un 'pong').
     """
 
-    def __init__(self, websocket):
+    def __init__(self, websocket, sujeto=None):
         self.websocket = websocket
+        self.sujeto = sujeto                 # quién es (Etapa 8): usuario, invitado, dispositivo, clave, abierto
         self._candado = asyncio.Lock()
 
     async def enviar(self, mensaje):
@@ -37,8 +38,8 @@ class GestorConexiones:
     def __init__(self):
         self._clientes = {}
 
-    def registrar(self, id_vehiculo, websocket):
-        cliente = ClienteWS(websocket)
+    def registrar(self, id_vehiculo, websocket, sujeto=None):
+        cliente = ClienteWS(websocket, sujeto)
         self._clientes.setdefault(id_vehiculo, set()).add(cliente)
         return cliente
 
@@ -55,6 +56,34 @@ class GestorConexiones:
 
     def total_clientes(self, id_vehiculo):
         return len(self._clientes.get(id_vehiculo, ()))
+
+    def clientes(self, id_vehiculo=None):
+        """[(id_vehiculo, cliente)] de una unidad o de todas."""
+        if id_vehiculo is not None:
+            return [(id_vehiculo, c) for c in list(self._clientes.get(id_vehiculo, ()))]
+        return [(v, c) for v, grupo in list(self._clientes.items()) for c in list(grupo)]
+
+    def dispositivos(self, id_vehiculo):
+        return sum(1 for c in self._clientes.get(id_vehiculo, ()) if c.sujeto and c.sujeto.tipo == "dispositivo")
+
+    async def cerrar_cliente(self, id_vehiculo, cliente, codigo, motivo, mensaje=None):
+        """Cierra UNA conexión (p. ej. permiso revocado) avisando antes el motivo."""
+        self.desconectar(id_vehiculo, cliente)
+        try:
+            if mensaje is not None:
+                await cliente.enviar(mensaje)
+            await cliente.websocket.close(code=codigo, reason=motivo[:120])
+        except Exception:
+            pass
+
+    async def cerrar_si(self, id_vehiculo, predicado, codigo, motivo, mensaje=None):
+        """Cierra las conexiones de la unidad cuyo sujeto cumpla el predicado. Devuelve cuántas."""
+        cerradas = 0
+        for v, cliente in self.clientes(id_vehiculo):
+            if cliente.sujeto is not None and predicado(cliente.sujeto):
+                await self.cerrar_cliente(v, cliente, codigo, motivo, mensaje)
+                cerradas += 1
+        return cerradas
 
     async def enviar(self, cliente, mensaje):
         await cliente.enviar(mensaje)

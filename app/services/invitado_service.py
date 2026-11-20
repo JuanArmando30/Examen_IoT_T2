@@ -245,6 +245,9 @@ class InvitadoService:
         r = self._activas.pop(id_vehiculo, None)
         if r is None:
             return False
+        await self.gestor.cerrar_si(
+            id_vehiculo, lambda s: s.tipo == "invitado" and s.id_sesion == r.id_sesion, 4403, "Reserva terminada",
+            eventos.error(id_vehiculo, "WS_REVOCADO", "Tu reserva terminó."))
         if self.demo_ejecutor.esta_ejecutando(id_vehiculo):
             try:
                 await self.demo_ejecutor.cancelar(id_vehiculo)

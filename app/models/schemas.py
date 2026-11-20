@@ -662,3 +662,42 @@ class ExhibicionOut(BaseModel):
     abierta: bool
     abierta_hasta: Optional[datetime] = None
     reserva: Optional[ReservaVigenteOut] = None
+
+
+# ================== Tiempo real y dispositivo (Etapa 8) ==================
+
+
+class TicketSolicitud(BaseModel):
+    id_vehiculo: int = Field(gt=0)
+
+
+class SujetoOut(BaseModel):
+    tipo: str
+    rol: Optional[str] = None
+
+
+class TicketOut(BaseModel):
+    ticket: str
+    expira_en_s: int
+    sujeto: SujetoOut
+
+
+class CredencialDispositivoOut(BaseModel):
+    id_credencial: int
+    creada_en: Optional[datetime] = None
+    ultimo_uso: Optional[datetime] = None
+    vigente: bool
+
+
+class DispositivoOut(BaseModel):
+    id_vehiculo: int
+    conectado: bool = Field(description="El ESP32 está conectado ahora mismo con su credencial.")
+    credencial: Optional[CredencialDispositivoOut] = None
+    ws_abierto: bool
+    revocadas: Optional[int] = None
+
+
+class SecretoDispositivoOut(BaseModel):
+    id_vehiculo: int
+    id_credencial: int
+    secreto: str = Field(description="Se muestra UNA sola vez: va en secretos.h del firmware.")

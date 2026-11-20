@@ -16,6 +16,7 @@ from app.repositories.stored_procedure_repository import (
     PROCEDIMIENTOS_V010,
     PROCEDIMIENTOS_V011,
     PROCEDIMIENTOS_V012,
+    PROCEDIMIENTOS_V013,
 )
 
 GRUPOS = (
@@ -23,6 +24,7 @@ GRUPOS = (
     ("Autenticación (V010)", PROCEDIMIENTOS_V010),
     ("DEMO privadas (V011)", PROCEDIMIENTOS_V011),
     ("Invitados (V012)", PROCEDIMIENTOS_V012),
+    ("Dispositivo (V013)", PROCEDIMIENTOS_V013),
 )
 
 

@@ -19,7 +19,8 @@ from app.api.dependencies import (
 from app.api.documentacion import ADMIN_ESCRITURA, ADMIN_LECTURA, TAG_ADMIN
 from app.models.schemas import (
     AsignacionCrear, AsignacionFinalizar, AsignacionOut, AuditoriaOut,
-    CapacidadGuardar, CodigoRestablecimientoOut, DemoDetalleOut, ExhibicionCambiar, ExhibicionOut, PasosDemoGuardar, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
+    CapacidadGuardar, CodigoRestablecimientoOut, DemoDetalleOut, DispositivoOut, ExhibicionCambiar, ExhibicionOut,
+    PasosDemoGuardar, SecretoDispositivoOut, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
     ModeloActualizar, ModeloCrear, ModeloOut, Pagina, UnidadActualizar,
     UnidadCrear, UnidadOut, UsuarioActualizar, UsuarioCrear, UsuarioOut,
 )
@@ -311,3 +312,30 @@ async def cambiar_exhibicion(id_vehiculo: IdVehiculo, cuerpo: ExhibicionCambiar,
 async def terminar_reserva(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ActorAdmin):
     """Termina de inmediato la reserva en curso: cancela la DEMO y envía DETENER."""
     return await contenedor.invitados.terminar_por_admin(actor, id_vehiculo)
+
+
+# ----------------------------------------------------------------- Dispositivo (Etapa 8)
+
+@router.get("/unidades/{id_vehiculo}/dispositivo", summary="Credencial y conexión del ESP32",
+            response_model=DispositivoOut, responses=ADMIN_LECTURA)
+def estado_dispositivo(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _actor: ActorAdmin):
+    """Si la unidad tiene credencial vigente y si su ESP32 está conectado ahora. **SP:** `sp_dispositivo_estado`."""
+    contenedor.unidades.obtener_o_fallar(id_vehiculo)
+    return contenedor.canal.estado_dispositivo(id_vehiculo)
+
+
+@router.post("/unidades/{id_vehiculo}/dispositivo", summary="Generar la credencial del ESP32", status_code=201,
+             response_model=SecretoDispositivoOut, responses=ADMIN_ESCRITURA)
+def crear_credencial(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ActorAdmin, response: Response):
+    """Revoca la anterior y genera una nueva. El secreto se muestra **una sola vez**
+    (en la base solo queda su HMAC); va en `secretos.h` del firmware. **SP:** `sp_dispositivo_crear`."""
+    response.headers["Cache-Control"] = "no-store"
+    contenedor.unidades.obtener_o_fallar(id_vehiculo)
+    return contenedor.canal.credencial_crear(actor, id_vehiculo)
+
+
+@router.post("/unidades/{id_vehiculo}/dispositivo/revocar", summary="Revocar la credencial del ESP32",
+             response_model=DispositivoOut, responses=ADMIN_ESCRITURA)
+async def revocar_credencial(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ActorAdmin):
+    """El ESP32 con esa credencial queda desconectado al instante. **SP:** `sp_dispositivo_revocar`."""
+    return await contenedor.canal.credencial_revocar(actor, id_vehiculo)

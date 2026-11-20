@@ -173,6 +173,10 @@ class AuthSettings:
     - LECTURA_ABIERTA (transición, por defecto true): estado, historial y
       DEMO se pueden leer sin sesión, como hasta ahora. Con false exigen
       dueño, administrador (unidades no vendidas) o soporte autorizado.
+    - WS_ABIERTO (transición, por defecto true): el WebSocket acepta
+      conexiones sin ticket ni credencial, como hasta ahora (lo usa el
+      firmware anterior). Con false: navegadores con ticket de un solo uso
+      y el ESP32 con su credencial (cabecera X-Dispositivo).
     """
 
     secreto: str = field(repr=False, default="")
@@ -183,6 +187,7 @@ class AuthSettings:
     bloqueo_min: int = 15
     max_intentos_codigo: int = 5
     lectura_abierta: bool = True
+    ws_abierto: bool = True
 
     @property
     def configurado(self):
@@ -202,4 +207,5 @@ class AuthSettings:
             acceso_min=_entero("TOKEN_ACCESO_MIN", 10, 1, 60),
             renovacion_dias=_entero("TOKEN_RENOVACION_DIAS", 3, 1, 30),
             lectura_abierta=os.getenv("LECTURA_ABIERTA", "true").strip().lower() in VERDADERO,
+            ws_abierto=os.getenv("WS_ABIERTO", "true").strip().lower() in VERDADERO,
         )
