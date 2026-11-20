@@ -1,7 +1,7 @@
 """Capa de acceso a los procedimientos almacenados de vehiculo_iot.
 
-Los 21 originales (prácticas 2.3/2.4), los 25 de ADMINISTRACIÓN (V009) y
-los 14 de AUTENTICACIÓN (V010).
+Los 21 originales (prácticas 2.3/2.4), los 25 de ADMINISTRACIÓN (V009),
+los 14 de AUTENTICACIÓN (V010) y los 3 de DEMO PRIVADAS (V011).
 Responsabilidad única: ejecutar SP con parámetros enlazados y devolver
 filas como diccionarios. Aquí NO hay reglas de negocio (eso vive en
 app/services) ni código HTTP.
@@ -111,9 +111,16 @@ PROCEDIMIENTOS_V010_ESCRITURA = frozenset({
 
 PROCEDIMIENTOS_V010 = PROCEDIMIENTOS_V010_LECTURA | PROCEDIMIENTOS_V010_ESCRITURA
 
+# --- V011 · DEMO privadas y editor de pasos ---------------------------------
+
+PROCEDIMIENTOS_V011_LECTURA = frozenset({"sp_limites_unidad"})
+PROCEDIMIENTOS_V011_ESCRITURA = frozenset({"sp_crear_demo_privada", "sp_guardar_pasos_demo"})
+PROCEDIMIENTOS_V011 = PROCEDIMIENTOS_V011_LECTURA | PROCEDIMIENTOS_V011_ESCRITURA
+
 PROCEDIMIENTOS_NUEVOS = (PROCEDIMIENTOS_V009_LECTURA | PROCEDIMIENTOS_V009_ESCRITURA
-                         | PROCEDIMIENTOS_V010)
-_ESCRITURA = PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA | PROCEDIMIENTOS_V010_ESCRITURA
+                         | PROCEDIMIENTOS_V010 | PROCEDIMIENTOS_V011)
+_ESCRITURA = (PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA | PROCEDIMIENTOS_V010_ESCRITURA
+              | PROCEDIMIENTOS_V011_ESCRITURA)
 PROCEDIMIENTOS_PERMITIDOS = PROCEDIMIENTOS_ORIGINALES | PROCEDIMIENTOS_NUEVOS
 
 # Errores de MySQL que significan "no hay conexión / sin acceso".
@@ -542,6 +549,22 @@ class _ProcedimientosSP:
 
     def registrar_historial_autor(self, id_vehiculo, id_comando, origen, id_usuario, id_sesion):
         self._llamar("sp_registrar_historial_autor", (id_vehiculo, id_comando, origen, id_usuario, id_sesion))
+
+    # ================= V011 · DEMO PRIVADAS =================
+
+    def limites_unidad(self, id_vehiculo):
+        """Límites de seguridad de la unidad (de su modelo), o None si no existe."""
+        registros = self._llamar("sp_limites_unidad", (id_vehiculo,))
+        return registros[0] if registros else None
+
+    def crear_demo_privada(self, id_vehiculo, id_usuario, nombre, descripcion):
+        registros = self._llamar("sp_crear_demo_privada", (id_vehiculo, id_usuario, nombre, descripcion))
+        return _id_creado(registros, "id_demo")
+
+    def guardar_pasos_demo(self, id_demo, pasos_json):
+        """Reemplaza todos los pasos (validados en el SP). Devuelve {pasos, duracion_total_ms}."""
+        registros = self._llamar("sp_guardar_pasos_demo", (id_demo, pasos_json))
+        return registros[0] if registros else {"pasos": 0, "duracion_total_ms": 0}
 
 
 class TransaccionSP(_ProcedimientosSP):

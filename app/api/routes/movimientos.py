@@ -28,7 +28,8 @@ async def registrar_movimiento(
 
     Rechaza (sin tocar estado ni historial ni emitir evento) si el vehículo
     no existe/está inactivo, si el comando no existe, está inactivo o es de
-    otro vehículo, o si hay una DEMO en ejecución.
+    otro vehículo, o si hay una DEMO en ejecución. **DETENER tiene prioridad**:
+    durante una DEMO la cancela y se registra.
 
     Autorización: token del **dueño** de la unidad, o de un administrador
     (inventario/exhibición, o vendida con soporte vigente). Transición:
@@ -40,10 +41,20 @@ async def registrar_movimiento(
     `sp_actualizar_estado`, `sp_registrar_historial`.
     """
     if contenedor.demo_ejecutor.esta_ejecutando(id_vehiculo):
-        raise ConflictoNegocio(
-            "El vehículo está ejecutando una DEMO. Cancélala antes de "
-            "enviar movimientos individuales."
-        )
+        # DETENER tiene prioridad: cancela la DEMO y se registra. Cualquier
+        # otro movimiento se rechaza mientras corre la DEMO.
+        detener = await asyncio.to_thread(contenedor.comandos.buscar_detener, id_vehiculo)
+        es_detener = detener is not None and (
+            cuerpo.id_comando == detener["id_comando"] or cuerpo.codigo == detener["codigo"])
+        if not es_detener:
+            raise ConflictoNegocio(
+                "El vehículo está ejecutando una DEMO. Cancélala (o envía DETENER) "
+                "antes de enviar movimientos individuales."
+            )
+        try:
+            await contenedor.demo_ejecutor.cancelar(id_vehiculo)
+        except ConflictoNegocio:
+            pass                                   # terminó justo ahora: nada que cancelar
 
     # Bloqueante (MySQL) -> hilo. Al volver, la transacción ya se confirmó.
     resultado = await asyncio.to_thread(

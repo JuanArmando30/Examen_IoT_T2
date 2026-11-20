@@ -34,7 +34,7 @@ def _ahora():
 class RepositorioFalso:
     """Lo mínimo de cada SP para probar rutas y servicios."""
 
-    def __init__(self, con_v009=True, version=10):
+    def __init__(self, con_v009=True, version=11):
         self.con_v009 = con_v009
         self.version = version
         self.llamadas = []
@@ -47,9 +47,10 @@ class RepositorioFalso:
                               "descripcion": None, "activo": True}]}
         self.modelos, self.capacidades, self.unidades = {}, {}, {}
         self.usuarios, self.asignaciones, self.auditoria = {}, [], []
-        self._ids = {"modelo": 0, "vehiculo": 1, "usuario": 0, "asignacion": 0}
+        self._ids = {"modelo": 0, "vehiculo": 1, "usuario": 0, "asignacion": 0, "demo": 0}
         self.tokens, self.codigos, self.soportes, self.historial_autor = {}, [], [], []
         self.estados = {}
+        self.demos, self.pasos = {}, {}
 
     def _nuevo(self, tipo):
         self._ids[tipo] += 1
@@ -93,8 +94,58 @@ class RepositorioFalso:
     def transaccion(self):
         yield self
 
+    # ---------------- DEMO (originales + V011) ----------------
     def obtener_demos(self, id_vehiculo):
-        return []
+        # Igual que el SP original («SELECT * FROM demos»): incluye ambito e id_propietario.
+        return [dict(d) for d in self.demos.values() if d["id_vehiculo"] == id_vehiculo]
+
+    def crear_demo(self, id_vehiculo, nombre, descripcion, ambito="fabrica", propietario=None):
+        i = self._nuevo("demo")
+        self.demos[i] = {"id_demo": i, "id_vehiculo": id_vehiculo, "ambito": ambito, "id_propietario": propietario,
+                         "nombre": nombre, "descripcion": descripcion, "activo": True}
+        self.pasos[i] = []
+        return i
+
+    def actualizar_demo(self, id_demo, nombre, descripcion, activo):
+        self.demos[id_demo].update(nombre=nombre, descripcion=descripcion, activo=activo)
+
+    def eliminar_demo(self, id_demo):
+        self.demos.pop(id_demo, None)
+        self.pasos.pop(id_demo, None)
+
+    def obtener_movimientos_demo(self, id_demo):
+        nombres = {c["id_comando"]: c for cs in self.comandos.values() for c in cs}
+        return [{"id_demo_movimiento": id_demo * 1000 + n, "orden": n, "id_comando": p["id_comando"],
+                 "comando": nombres[p["id_comando"]]["nombre"], "codigo": nombres[p["id_comando"]]["codigo"],
+                 "duracion_ms": p["duracion_ms"], "pausa_ms": p.get("pausa_ms", 0)}
+                for n, p in enumerate(self.pasos.get(id_demo, []), start=1)]
+
+    def agregar_movimiento_demo(self, id_demo, id_comando, orden, duracion_ms, pausa_ms):
+        self.pasos[id_demo].append({"id_comando": id_comando, "duracion_ms": duracion_ms, "pausa_ms": pausa_ms})
+
+    def limites_unidad(self, id_vehiculo):
+        if id_vehiculo not in self.vehiculos:
+            return None
+        u = self.unidades.get(id_vehiculo)
+        m = self.modelos.get(u["id_modelo"]) if u else None
+        return {"id_vehiculo": id_vehiculo, "id_modelo": m and m["id_modelo"], "modelo": m and m["nombre"],
+                "estado_comercial": u["estado_comercial"] if u else "exhibicion",
+                "max_movimiento_ms": m["max_movimiento_ms"] if m else 3000,
+                "max_paso_ms": m["max_paso_ms"] if m else 10000,
+                "max_pasos_demo": m["max_pasos_demo"] if m else 50,
+                "max_demo_ms": m["max_demo_ms"] if m else 300000}
+
+    def crear_demo_privada(self, id_vehiculo, id_usuario, nombre, descripcion):
+        vigente = self._vigente(id_vehiculo)
+        if not vigente or vigente["id_usuario"] != id_usuario:
+            raise ConflictoNegocio("Solo el comprador de la unidad puede crear DEMO privadas en ella.")
+        return self.crear_demo(id_vehiculo, nombre, descripcion, "privada", id_usuario)
+
+    def guardar_pasos_demo(self, id_demo, pasos_json):
+        import json
+        pasos = json.loads(pasos_json)
+        self.pasos[id_demo] = pasos
+        return {"pasos": len(pasos), "duracion_total_ms": sum(p["duracion_ms"] + p["pausa_ms"] for p in pasos)}
 
     def eliminar_vehiculo(self, id_vehiculo):
         self._anotar("sp_eliminar_vehiculo")

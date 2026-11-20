@@ -8,7 +8,7 @@ from app.api.dependencies import (
 from app.api.documentacion import BORRADO, ESCRITURA, LECTURA, TAG_VEHICULOS
 from app.core.exceptions import ConflictoNegocio
 from app.models.schemas import (
-    MensajeOut, VehiculoActualizar, VehiculoCrear, VehiculoDetalleOut,
+    LimitesOut, MensajeOut, VehiculoActualizar, VehiculoCrear, VehiculoDetalleOut,
     VehiculoOut,
 )
 
@@ -104,3 +104,21 @@ def eliminar_vehiculo(
 
     contenedor.vehiculos.eliminar(id_vehiculo)
     return {"mensaje": "Vehículo eliminado.", "id": id_vehiculo}
+
+
+@router.get(
+    "/{id_vehiculo}/limites",
+    summary="Límites de seguridad de la unidad",
+    response_model=LimitesOut,
+    responses=LECTURA,
+)
+def obtener_limites(id_vehiculo: IdVehiculo, contenedor: ContenedorDep,
+                    _lectura: LecturaUnidad):
+    """Topes del modelo de la unidad: duración de un movimiento, de cada paso
+    de DEMO, número de pasos y duración total de una DEMO. El editor de DEMO
+    los muestra y el servidor los exige al guardar y al iniciar.
+
+    503 si la base aún no tiene la migración V011. **SP:** `sp_limites_unidad`.
+    """
+    contenedor.esquema.exigir_demos_privadas()
+    return contenedor.demos.limites(id_vehiculo)

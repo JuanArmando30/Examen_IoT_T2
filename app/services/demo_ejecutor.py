@@ -68,10 +68,11 @@ class DemoEjecutor:
 
     # ------------------------ control ------------------------
 
-    async def iniciar(self, id_vehiculo, id_demo):
-        # Validaciones y lectura de RDS (bloqueante -> hilo).
+    async def iniciar(self, id_vehiculo, id_demo, actor=None):
+        # Validaciones y lectura de RDS (bloqueante -> hilo). `actor` permite
+        # al dueño iniciar su DEMO privada; nadie más la ve.
         demo, movimientos = await asyncio.to_thread(
-            self.demos.preparar_ejecucion, id_vehiculo, id_demo
+            self.demos.preparar_ejecucion, id_vehiculo, id_demo, actor
         )
 
         # Desde aquí hasta registrar la tarea NO hay 'await': la

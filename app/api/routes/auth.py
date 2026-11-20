@@ -9,11 +9,12 @@ from typing import List
 
 from fastapi import APIRouter, Request, Response
 
-from app.api.dependencies import ContenedorDep, IdVehiculo, Sesion
+from app.api.dependencies import ContenedorDep, IdDemo, IdVehiculo, Sesion
 from app.api.documentacion import SESION, SESION_PRIVADA, TAG_MIS, TAG_SESION
 from app.core.limite import ip_cliente
 from app.models.schemas import (
-    CambiarContrasenaSolicitud, LoginSolicitud, MensajeOut, MiVehiculoOut, RenovarSolicitud,
+    CambiarContrasenaSolicitud, DemoDetalleOut, DemoPrivadaActualizar, DemoPrivadaCrear, DemoResumenOut,
+    LoginSolicitud, MensajeOut, MiVehiculoOut, PasosDemoGuardar, RenovarSolicitud,
     RestablecerSolicitud, SesionOut, SoporteOtorgar, SoporteOut, SoporteRevocadoOut,
     UsuarioSesionOut,
 )
@@ -155,3 +156,66 @@ def revocar_soporte(id_vehiculo: IdVehiculo, principal: Sesion, contenedor: Cont
     """Termina de inmediato las autorizaciones vigentes que dio el comprador.
     **SP:** `sp_acceso_unidad`, `sp_soporte_revocar`."""
     return contenedor.auth.soporte_revocar(principal, id_vehiculo)
+
+
+# ================= DEMO del comprador (Etapa 6) =================
+# Solo el dueño vigente de la unidad. Ve las DEMO de fábrica (sin editarlas)
+# y crea, edita, reordena y elimina las suyas. Se inician con la ruta de
+# siempre: POST /vehiculos/{id}/demos/{id_demo}/iniciar (con su token).
+
+
+def _dueno(contenedor, principal, id_vehiculo):
+    contenedor.auth.exigir_propietario(principal, id_vehiculo)
+    return principal.actor()
+
+
+@router.get("/mis-vehiculos/{id_vehiculo}/demos", tags=[TAG_MIS], summary="DEMO de mi unidad",
+            response_model=List[DemoResumenOut], responses=SESION_PRIVADA)
+def mis_demos(id_vehiculo: IdVehiculo, principal: Sesion, contenedor: ContenedorDep):
+    """Las DEMO de fábrica y las privadas del usuario en esa unidad.
+    **SP:** `sp_acceso_unidad`, `sp_obtener_demos`, `sp_obtener_movimientos_demo`."""
+    return contenedor.demos.visibles(id_vehiculo, _dueno(contenedor, principal, id_vehiculo))
+
+
+@router.post("/mis-vehiculos/{id_vehiculo}/demos", tags=[TAG_MIS], status_code=201, summary="Crear una DEMO propia",
+             response_model=DemoDetalleOut, responses=SESION_PRIVADA)
+def crear_mi_demo(id_vehiculo: IdVehiculo, cuerpo: DemoPrivadaCrear, principal: Sesion, contenedor: ContenedorDep):
+    """Nace sin pasos (máx. 20 por unidad). **SP:** `sp_crear_demo_privada`, `sp_registrar_auditoria`."""
+    actor = _dueno(contenedor, principal, id_vehiculo)
+    return contenedor.demos.crear_privada(actor, id_vehiculo, cuerpo.nombre, cuerpo.descripcion)
+
+
+@router.get("/mis-vehiculos/{id_vehiculo}/demos/{id_demo}", tags=[TAG_MIS], summary="Detalle y pasos de una DEMO",
+            response_model=DemoDetalleOut, responses=SESION_PRIVADA)
+def mi_demo(id_vehiculo: IdVehiculo, id_demo: IdDemo, principal: Sesion, contenedor: ContenedorDep):
+    """Una DEMO de fábrica (solo lectura) o una propia. Las privadas de otros: 404."""
+    return contenedor.demos.detalle(id_vehiculo, id_demo, _dueno(contenedor, principal, id_vehiculo))
+
+
+@router.post("/mis-vehiculos/{id_vehiculo}/demos/{id_demo}/actualizar", tags=[TAG_MIS],
+             summary="Renombrar o activar una DEMO propia", response_model=DemoDetalleOut, responses=SESION_PRIVADA)
+def actualizar_mi_demo(id_vehiculo: IdVehiculo, id_demo: IdDemo, cuerpo: DemoPrivadaActualizar,
+                       principal: Sesion, contenedor: ContenedorDep):
+    """**SP:** `sp_actualizar_demo`, `sp_registrar_auditoria`."""
+    actor = _dueno(contenedor, principal, id_vehiculo)
+    return contenedor.demos.actualizar_privada(actor, id_vehiculo, id_demo, cuerpo.nombre, cuerpo.descripcion, cuerpo.activo)
+
+
+@router.post("/mis-vehiculos/{id_vehiculo}/demos/{id_demo}/eliminar", tags=[TAG_MIS],
+             summary="Eliminar una DEMO propia", response_model=MensajeOut, responses=SESION_PRIVADA)
+def eliminar_mi_demo(id_vehiculo: IdVehiculo, id_demo: IdDemo, principal: Sesion, contenedor: ContenedorDep):
+    """409 si está en ejecución. **SP:** `sp_eliminar_demo`, `sp_registrar_auditoria`."""
+    contenedor.demos.eliminar_privada(_dueno(contenedor, principal, id_vehiculo), id_vehiculo, id_demo)
+    return {"mensaje": "DEMO eliminada."}
+
+
+@router.post("/mis-vehiculos/{id_vehiculo}/demos/{id_demo}/pasos", tags=[TAG_MIS],
+             summary="Guardar los pasos de una DEMO propia", response_model=DemoDetalleOut, responses=SESION_PRIVADA)
+def guardar_mis_pasos(id_vehiculo: IdVehiculo, id_demo: IdDemo, cuerpo: PasosDemoGuardar,
+                      principal: Sesion, contenedor: ContenedorDep):
+    """Reemplaza TODOS los pasos en una transacción; el orden es el de la lista
+    (así se reordena). Se validan comando (de la unidad y activo) y los límites
+    del modelo. **SP:** `sp_guardar_pasos_demo`, `sp_registrar_auditoria`."""
+    actor = _dueno(contenedor, principal, id_vehiculo)
+    return contenedor.demos.guardar_pasos(actor, id_vehiculo, id_demo,
+                                          [p.model_dump() for p in cuerpo.pasos], "privada")

@@ -14,12 +14,12 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Query, Response
 
 from app.api.dependencies import (
-    ActorAdmin, ContenedorDep, IdAsignacion, IdModelo, IdUsuario, IdVehiculo,
+    ActorAdmin, ContenedorDep, IdAsignacion, IdDemo, IdModelo, IdUsuario, IdVehiculo,
 )
 from app.api.documentacion import ADMIN_ESCRITURA, ADMIN_LECTURA, TAG_ADMIN
 from app.models.schemas import (
     AsignacionCrear, AsignacionFinalizar, AsignacionOut, AuditoriaOut,
-    CapacidadGuardar, CodigoRestablecimientoOut, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
+    CapacidadGuardar, CodigoRestablecimientoOut, DemoDetalleOut, PasosDemoGuardar, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
     ModeloActualizar, ModeloCrear, ModeloOut, Pagina, UnidadActualizar,
     UnidadCrear, UnidadOut, UsuarioActualizar, UsuarioCrear, UsuarioOut,
 )
@@ -272,3 +272,16 @@ def listar_auditoria(contenedor: ContenedorDep, _actor: ActorAdmin,
     **SP:** `sp_listar_auditoria`."""
     return contenedor.auditoria.listar(accion, id_usuario, recurso_tipo, recurso_id,
                                        desde, hasta, limite, desplazamiento)
+
+
+# ----------------------------------------------------------------- DEMO de fábrica (Etapa 6)
+
+@router.post("/unidades/{id_vehiculo}/demos/{id_demo}/pasos", summary="Guardar los pasos de una DEMO de fábrica",
+             response_model=DemoDetalleOut, responses=ADMIN_ESCRITURA)
+def guardar_pasos_fabrica(id_vehiculo: IdVehiculo, id_demo: IdDemo, cuerpo: PasosDemoGuardar,
+                          contenedor: ContenedorDep, actor: ActorAdmin):
+    """Editor de la empresa: reemplaza TODOS los pasos (el orden es el de la lista),
+    con los mismos límites del modelo que las DEMO de los compradores. No puede
+    tocar DEMO privadas. **SP:** `sp_guardar_pasos_demo`, `sp_registrar_auditoria`."""
+    return contenedor.demos.guardar_pasos(actor, id_vehiculo, id_demo,
+                                          [p.model_dump() for p in cuerpo.pasos], "fabrica")

@@ -126,7 +126,7 @@ def eliminar_demo(
 )
 async def iniciar_demo(
     id_vehiculo: IdVehiculo, id_demo: IdDemo,
-    contenedor: ContenedorDep, _actor: ControlUnidad,
+    contenedor: ContenedorDep, actor: ControlUnidad,
 ):
     """Responde **202 Accepted** de inmediato; la secuencia corre en segundo
     plano y se transmite por `ws://localhost:8000/ws/vehiculos/{id_vehiculo}`:
@@ -144,7 +144,7 @@ async def iniciar_demo(
     `sp_obtener_movimientos_demo`, `sp_obtener_comandos_vehiculo`,
     `sp_obtener_estado`, `sp_actualizar_estado`.
     """
-    return await contenedor.demo_ejecutor.iniciar(id_vehiculo, id_demo)
+    return await contenedor.demo_ejecutor.iniciar(id_vehiculo, id_demo, actor)
 
 
 # ====================== MOVIMIENTOS DE DEMO ======================

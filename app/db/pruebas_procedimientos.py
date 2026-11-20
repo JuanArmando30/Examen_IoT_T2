@@ -140,7 +140,7 @@ def _h(texto):
 def probar_v010(ex, base):
     ex.usar(base)
     antes = ex.conteos(base)
-    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] == 10, "sp_version_esquema no devuelve 10")
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 10, "sp_version_esquema debe ser 10 o más")
     futuro = ex.valor("SELECT UTC_TIMESTAMP() + INTERVAL 1 DAY")
     pasado_seguro = ex.valor("SELECT UTC_TIMESTAMP() + INTERVAL 2 SECOND")
 
@@ -245,8 +245,114 @@ def probar_v010(ex, base):
     _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
 
 
+def _diagnostico_demos_existentes(ex):
+    """Solo lectura: ¿las DEMO que ya existen cumplen los límites de su modelo?
+    Si no, la API (V011) se negará a iniciarlas hasta corregir sus pasos."""
+    filas = ex.ejecutar("""
+        SELECT d.id_demo, d.nombre, COUNT(dm.id_demo_movimiento),
+               COALESCE(MAX(GREATEST(dm.duracion_ms, dm.pausa_ms)), 0),
+               COALESCE(SUM(dm.duracion_ms + dm.pausa_ms), 0),
+               COALESCE(m.max_paso_ms, 10000), COALESCE(m.max_pasos_demo, 50), COALESCE(m.max_demo_ms, 300000)
+          FROM demos d
+          JOIN vehiculos v ON v.id_vehiculo = d.id_vehiculo
+          LEFT JOIN modelos_vehiculo m ON m.id_modelo = v.id_modelo
+          LEFT JOIN demo_movimientos dm ON dm.id_demo = d.id_demo
+         GROUP BY d.id_demo, d.nombre, m.max_paso_ms, m.max_pasos_demo, m.max_demo_ms""")
+    fuera = [f"«{nombre}» (#{i}: {n} pasos, paso máx. {paso} ms, total {total} ms; límites {mp} ms / {mn} pasos / {md} ms)"
+             for i, nombre, n, paso, total, mp, mn, md in filas if n > mn or paso > mp or total > md]
+    if fuera:
+        ex.log("   ⚠ DEMO existentes FUERA de los límites de su modelo (no se podrán iniciar hasta ajustarlas): "
+               + "; ".join(fuera))
+    else:
+        ex.log(f"   · las {len(filas)} DEMO existentes cumplen los límites de su modelo")
+
+
+def probar_v011(ex, base):
+    ex.usar(base)
+    antes = ex.conteos(base)
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 11, "sp_version_esquema debe ser 11 o más")
+    _diagnostico_demos_existentes(ex)
+
+    u = int(ex.llamar("sp_crear_usuario", ("demo.v011@prueba.local", "Comprador V011", "usuario"))[0]["id_usuario"])
+    otro = int(ex.llamar("sp_crear_usuario", ("otro.v011@prueba.local", "Otro V011", "usuario"))[0]["id_usuario"])
+    # Límites pequeños para probar los bordes: paso ≤ 5000 ms, ≤ 3 pasos, total ≤ 9000 ms.
+    m = int(ex.llamar("sp_crear_modelo", ("Modelo V011", None, "ESP32", 3000, 5000, 3, 9000))[0]["id_modelo"])
+    ex.llamar("sp_guardar_capacidad", (m, "AVANZAR", 1, None, "movimiento", 1))
+    ex.llamar("sp_guardar_capacidad", (m, "LUZ", 10, None, "accesorio", 0))
+    ex.llamar("sp_guardar_capacidad", (m, "DETENER", 9, None, "paro", 1))
+    v = int(ex.llamar("sp_crear_unidad", (m, "Unidad V011", None, None, "inventario", 1))[0]["id_vehiculo"])
+    v2 = int(ex.llamar("sp_crear_unidad", (m, "Otra unidad V011", None, None, "inventario", 1))[0]["id_vehiculo"])
+    cmd = {r[1]: r[0] for r in ex.ejecutar("SELECT id_comando, codigo FROM comandos WHERE id_vehiculo = %s", (v,))}
+    ajeno = ex.valor("SELECT id_comando FROM comandos WHERE id_vehiculo = %s AND codigo = 1", (v2,))
+
+    lim = ex.llamar("sp_limites_unidad", (v,))[0]
+    _afirmar((lim["max_paso_ms"], lim["max_pasos_demo"], lim["max_demo_ms"]) == (5000, 3, 9000), f"sp_limites_unidad: {lim}")
+    _afirmar(ex.llamar("sp_limites_unidad", (999999,)) == [], "unidad inexistente")
+
+    # ---- Solo el comprador vigente crea DEMO privadas
+    _debe_fallar(lambda: ex.llamar("sp_crear_demo_privada", (v, u, "Mía", None)), ERRNO_SIGNAL, "sin asignación no se crea")
+    ex.llamar("sp_asignar_unidad", (v, u, None))
+    _debe_fallar(lambda: ex.llamar("sp_crear_demo_privada", (v, otro, "Ajena", None)), ERRNO_SIGNAL, "otro usuario no crea")
+    d = int(ex.llamar("sp_crear_demo_privada", (v, u, "Mi DEMO", "prueba"))[0]["id_demo"])
+    fila = ex.ejecutar("SELECT ambito, id_propietario, activo FROM demos WHERE id_demo = %s", (d,))[0]
+    _afirmar(fila[0] == "privada" and fila[1] == u and fila[2] == 1, f"DEMO privada: {fila}")
+
+    # ---- Pasos: reemplazo atómico y orden del arreglo
+    def pasos(lista):
+        return ex.llamar("sp_guardar_pasos_demo", (d, json.dumps(lista)))[0]
+
+    r = pasos([{"id_comando": cmd[1], "duracion_ms": 1000, "pausa_ms": 200},
+               {"id_comando": cmd[10], "duracion_ms": 500}])
+    _afirmar(r["pasos"] == 2 and r["duracion_total_ms"] == 1700, f"guardar 2 pasos: {r}")
+    orden = ex.ejecutar("SELECT orden, id_comando, pausa_ms FROM demo_movimientos WHERE id_demo = %s ORDER BY orden", (d,))
+    _afirmar(orden == [(1, cmd[1], 200), (2, cmd[10], 0)], f"orden y pausa por defecto: {orden}")
+    pasos([{"id_comando": cmd[10], "duracion_ms": 500}, {"id_comando": cmd[1], "duracion_ms": 1000}])   # reordenar
+    orden = ex.ejecutar("SELECT orden, id_comando FROM demo_movimientos WHERE id_demo = %s ORDER BY orden", (d,))
+    _afirmar(orden == [(1, cmd[10]), (2, cmd[1])], f"reordenar: {orden}")
+
+    # ---- Lo que debe fallar (y NO tocar los pasos guardados)
+    casos = [
+        ([{"id_comando": cmd[1], "duracion_ms": 1000}] * 4, "más pasos que max_pasos_demo"),
+        ([{"id_comando": cmd[1], "duracion_ms": 5001}], "paso más largo que max_paso_ms"),
+        ([{"id_comando": cmd[1], "duracion_ms": 1000, "pausa_ms": 6000}], "pausa más larga que max_paso_ms"),
+        ([{"id_comando": cmd[1], "duracion_ms": 0}], "duración 0"),
+        ([{"id_comando": cmd[1]}], "sin duración"),
+        ([{"id_comando": cmd[1], "duracion_ms": 5000}, {"id_comando": cmd[1], "duracion_ms": 4500}], "total > max_demo_ms"),
+        ([{"id_comando": ajeno, "duracion_ms": 1000}], "comando de otra unidad"),
+        ([{"id_comando": 999999, "duracion_ms": 1000}], "comando inexistente"),
+    ]
+    for lista, descripcion in casos:
+        _debe_fallar(lambda lista=lista: pasos(lista), ERRNO_SIGNAL, descripcion)
+    ex.ejecutar("UPDATE comandos SET activo = 0 WHERE id_comando = %s", (cmd[10],))
+    _debe_fallar(lambda: pasos([{"id_comando": cmd[10], "duracion_ms": 500}]), ERRNO_SIGNAL, "comando inactivo")
+    ex.ejecutar("UPDATE comandos SET activo = 1 WHERE id_comando = %s", (cmd[10],))
+    _debe_fallar(lambda: ex.llamar("sp_guardar_pasos_demo", (d, json.dumps({"id_comando": 1}))), ERRNO_SIGNAL, "no es lista")
+    _debe_fallar(lambda: ex.llamar("sp_guardar_pasos_demo", (999999, "[]")), ERRNO_SIGNAL, "DEMO inexistente")
+    _afirmar(ex.valor("SELECT COUNT(*) FROM demo_movimientos WHERE id_demo = %s", (d,)) == 2,
+             "un guardado rechazado no debe borrar los pasos anteriores")
+    _afirmar(pasos([])["pasos"] == 0, "se pueden borrar todos los pasos")
+
+    # ---- Máximo 20 DEMO privadas por unidad y comprador
+    for i in range(19):
+        ex.llamar("sp_crear_demo_privada", (v, u, f"Extra {i}", None))
+    _debe_fallar(lambda: ex.llamar("sp_crear_demo_privada", (v, u, "La 21", None)), ERRNO_SIGNAL, "máximo 20")
+
+    # ---- Limpieza
+    ex.ejecutar("DELETE FROM demos WHERE id_vehiculo IN (%s, %s)", (v, v2))
+    ex.ejecutar("DELETE FROM asignaciones WHERE id_vehiculo IN (%s, %s)", (v, v2))
+    ex.llamar("sp_eliminar_vehiculo", (v,))
+    ex.llamar("sp_eliminar_vehiculo", (v2,))
+    ex.ejecutar("DELETE FROM modelo_comandos WHERE id_modelo = %s", (m,))
+    ex.ejecutar("DELETE FROM modelos_vehiculo WHERE id_modelo = %s", (m,))
+    ex.ejecutar("DELETE FROM auditoria WHERE id_usuario IN (%s, %s)", (u, otro))
+    ex.ejecutar("DELETE FROM usuarios WHERE id_usuario IN (%s, %s)", (u, otro))
+    despues = ex.conteos(base)
+    _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
+
+
 # versión → función(ejecutor, base_de_la_copia)
 PRUEBAS = {
     "V009": probar_v009,
     "V010": probar_v010,
+    "V011": probar_v011,
 }

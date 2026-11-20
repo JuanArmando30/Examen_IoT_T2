@@ -293,20 +293,20 @@ class AuthService:
         self.esquema.exigir_autenticacion()
         return self.repositorio.mis_vehiculos(principal.id_usuario)
 
-    def _exigir_propietario(self, principal, id_vehiculo):
+    def exigir_propietario(self, principal, id_vehiculo):
         rel = self.relacion(principal, id_vehiculo)
         if not rel["es_propietario"]:
             raise Prohibido("Esta unidad no está asignada a tu cuenta.")
 
     def soporte_listar(self, principal, id_vehiculo):
         if not principal.es_admin:
-            self._exigir_propietario(principal, id_vehiculo)
+            self.exigir_propietario(principal, id_vehiculo)
         else:
             self.relacion(principal, id_vehiculo)
         return self.repositorio.soporte_listar(id_vehiculo)
 
     def soporte_otorgar(self, principal, id_vehiculo, horas, motivo, id_administrador=None):
-        self._exigir_propietario(principal, id_vehiculo)
+        self.exigir_propietario(principal, id_vehiculo)
         if not 1 <= horas <= MAX_HORAS_SOPORTE:
             raise SolicitudInvalida(f"La autorización dura entre 1 y {MAX_HORAS_SOPORTE} horas.")
         expira = tokens.ahora() + timedelta(hours=horas)
@@ -321,7 +321,7 @@ class AuthService:
                     if s["id_autorizacion"] == id_autorizacion)
 
     def soporte_revocar(self, principal, id_vehiculo):
-        self._exigir_propietario(principal, id_vehiculo)
+        self.exigir_propietario(principal, id_vehiculo)
         revocadas = self.repositorio.soporte_revocar(id_vehiculo, principal.id_usuario)
         self.auditoria.registrar(principal.actor(), "soporte.revocar", "unidad", id_vehiculo,
                                  {"revocadas": revocadas})

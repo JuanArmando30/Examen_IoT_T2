@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 VERSION_ADMINISTRACION = 9
 VERSION_AUTENTICACION = 10
-VERSION_MAS_RECIENTE = VERSION_AUTENTICACION      # deja de consultarse al alcanzarla
+VERSION_DEMOS_PRIVADAS = 11
+VERSION_MAS_RECIENTE = VERSION_DEMOS_PRIVADAS     # deja de consultarse al alcanzarla
 ESTADOS = ("inventario", "vendida", "exhibicion", "baja")
 _PATRON_CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 
@@ -93,6 +94,16 @@ class EsquemaBD:
 
     def tiene_autenticacion(self):
         return self.version() >= VERSION_AUTENTICACION
+
+    def tiene_demos_privadas(self):
+        return self.version() >= VERSION_DEMOS_PRIVADAS
+
+    def exigir_demos_privadas(self):
+        if not self.tiene_demos_privadas():
+            raise EsquemaPendiente(
+                "La base aún no tiene la migración V011 (DEMO privadas y editor de pasos). "
+                "Aplícala con: python -m app.db.migrar aplicar --respaldo <snapshot>."
+            )
 
     def exigir_autenticacion(self):
         if not self.tiene_autenticacion():

@@ -47,15 +47,17 @@ class Contenedor:
         self.movimientos = MovimientoService(
             self.repositorio, self.vehiculos, self.comandos, self.esquema
         )
+        # Bitácora (Etapa 3): la usan Administración y las DEMO privadas.
+        self.auditoria = AuditoriaService(self.repositorio, self.esquema)
         self.demos = DemoService(
-            self.repositorio, self.vehiculos, self.comandos
+            self.repositorio, self.vehiculos, self.comandos, self.esquema, self.auditoria
         )
         self.demo_ejecutor = DemoEjecutor(
             self.demos, self.estados, self.comandos, self.gestor_ws
         )
+        self.demos.ejecutor = self.demo_ejecutor
 
         # ---- Administración (Etapa 3) ----
-        self.auditoria = AuditoriaService(self.repositorio, self.esquema)
         self.modelos = ModeloService(self.repositorio, self.esquema, self.auditoria)
         self.unidades = UnidadService(
             self.repositorio, self.esquema, self.auditoria, self.modelos,

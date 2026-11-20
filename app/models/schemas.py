@@ -526,3 +526,65 @@ class SoporteOut(BaseModel):
 class SoporteRevocadoOut(BaseModel):
     id_vehiculo: int
     revocadas: int
+
+
+# ================== DEMO privadas y editor (Etapa 6) ==================
+
+
+class LimitesOut(BaseModel):
+    """Límites de seguridad de la unidad (de su modelo)."""
+
+    id_vehiculo: int
+    id_modelo: Optional[int] = None
+    modelo: Optional[str] = None
+    estado_comercial: Optional[str] = None
+    max_movimiento_ms: int
+    max_paso_ms: int
+    max_pasos_demo: int
+    max_demo_ms: int
+
+
+class DemoPrivadaCrear(BaseModel):
+    nombre: str = Field(min_length=1, max_length=80)
+    descripcion: Optional[str] = Field(default=None, max_length=255)
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "nombre": "Mi rutina de exhibición", "descripcion": "Avanza, gira y saluda con la pala",
+    }]})
+
+
+class DemoPrivadaActualizar(DemoPrivadaCrear):
+    activo: bool = True
+
+
+class PasoDemo(BaseModel):
+    """Un paso del editor. El orden es la posición en la lista."""
+
+    id_comando: int = Field(gt=0)
+    duracion_ms: int = Field(ge=1, le=600000)
+    pausa_ms: int = Field(default=0, ge=0, le=600000)
+
+
+class PasosDemoGuardar(BaseModel):
+    pasos: List[PasoDemo] = Field(max_length=500)
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{"pasos": [
+        {"id_comando": 1, "duracion_ms": 1500, "pausa_ms": 300},
+        {"id_comando": 3, "duracion_ms": 800, "pausa_ms": 0},
+    ]}]})
+
+
+class DemoResumenOut(BaseModel):
+    id_demo: int
+    id_vehiculo: int
+    nombre: str
+    descripcion: Optional[str] = None
+    activo: bool
+    ambito: Literal["fabrica", "privada"]
+    propia: bool
+    pasos: int
+    duracion_total_ms: int
+
+
+class DemoDetalleOut(DemoResumenOut):
+    movimientos: List[MovimientoDemoOut]
