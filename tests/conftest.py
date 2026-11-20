@@ -34,7 +34,7 @@ def _ahora():
 class RepositorioFalso:
     """Lo mínimo de cada SP para probar rutas y servicios."""
 
-    def __init__(self, con_v009=True, version=11):
+    def __init__(self, con_v009=True, version=12):
         self.con_v009 = con_v009
         self.version = version
         self.llamadas = []
@@ -50,7 +50,7 @@ class RepositorioFalso:
         self._ids = {"modelo": 0, "vehiculo": 1, "usuario": 0, "asignacion": 0, "demo": 0}
         self.tokens, self.codigos, self.soportes, self.historial_autor = {}, [], [], []
         self.estados = {}
-        self.demos, self.pasos = {}, {}
+        self.demos, self.pasos, self.reservas = {}, {}, []
 
     def _nuevo(self, tipo):
         self._ids[tipo] += 1
@@ -84,7 +84,10 @@ class RepositorioFalso:
         return self.estados.get(id_vehiculo)
 
     def actualizar_estado(self, id_vehiculo, id_comando, conectado):
-        self.estados[id_vehiculo] = {"id_vehiculo": id_vehiculo, "id_comando": id_comando,
+        # Misma forma que sp_obtener_estado (incluye nombres de vehículo y comando).
+        c = next((x for x in self.comandos.get(id_vehiculo, []) if x["id_comando"] == id_comando), None)
+        self.estados[id_vehiculo] = {"id_vehiculo": id_vehiculo, "vehiculo": self.vehiculos[id_vehiculo]["nombre"],
+                                     "id_comando": id_comando, "comando": c and c["nombre"], "codigo": c and c["codigo"],
                                      "conectado": conectado, "fecha_actualizacion": None}
 
     def registrar_historial(self, id_vehiculo, id_comando, origen):
@@ -146,6 +149,63 @@ class RepositorioFalso:
         pasos = json.loads(pasos_json)
         self.pasos[id_demo] = pasos
         return {"pasos": len(pasos), "duracion_total_ms": sum(p["duracion_ms"] + p["pausa_ms"] for p in pasos)}
+
+    # ---------------- V012 (invitados) ----------------
+    def catalogo_exhibicion(self):
+        return [{"id_vehiculo": i, "nombre": u["nombre"], "descripcion": u["descripcion"], "es_simulada": u["es_simulada"],
+                 "modelo": self.modelos[u["id_modelo"]]["nombre"], "modelo_descripcion": None,
+                 "microcontrolador": u["microcontrolador"], "conectado": None}
+                for i, u in self.unidades.items() if u["estado_comercial"] == "exhibicion" and u["activo"]]
+
+    def invitado_reservar(self, id_vehiculo, huella, red, minutos, por_hora, enfriamiento_min):
+        ahora = _ahora()
+        for r in self.reservas:                                   # las vencidas se cierran solas
+            if r["fin"] is None and r["expira"] <= ahora:
+                r.update(fin=ahora, motivo="expirada")
+        u = self.unidades.get(id_vehiculo)
+        if not u or u["estado_comercial"] != "exhibicion" or not u["activo"]:
+            return {"resultado": "no_disponible", "segundos": 0}
+        viva = next((r for r in self.reservas if r["id_vehiculo"] == id_vehiculo and r["fin"] is None), None)
+        if viva:
+            return {"resultado": "ocupada", "segundos": int((viva["expira"] - ahora).total_seconds())}
+        mias = [r for r in self.reservas if r["red"] == red]
+        if len([r for r in mias if r["inicio"] > ahora - timedelta(hours=1)]) >= por_hora:
+            return {"resultado": "limite", "segundos": 3600}
+        ultima = max((r["fin"] or r["expira"] for r in mias), default=None)
+        if ultima and ultima + timedelta(minutes=enfriamiento_min) > ahora:
+            return {"resultado": "enfriamiento", "segundos": int((ultima + timedelta(minutes=enfriamiento_min) - ahora).total_seconds())}
+        i = len(self.reservas) + 1
+        self.reservas.append({"id_reserva": i, "id_sesion": 100 + i, "id_vehiculo": id_vehiculo, "huella": huella,
+                              "red": red, "inicio": ahora, "expira": ahora + timedelta(minutes=minutos),
+                              "fin": None, "motivo": None})
+        return {"resultado": "ok", "id_sesion": 100 + i, "id_reserva": i, "expira_en": None, "segundos": minutos * 60}
+
+    def invitado_sesion(self, huella):
+        return next(({"id_sesion": r["id_sesion"], "id_reserva": r["id_reserva"], "id_vehiculo": r["id_vehiculo"]}
+                     for r in self.reservas if r["huella"] == huella and r["fin"] is None), None)
+
+    def invitado_finalizar(self, id_reserva, motivo):
+        for r in self.reservas:
+            if r["id_reserva"] == id_reserva and r["fin"] is None:
+                r.update(fin=_ahora(), motivo=motivo)
+                return 1
+        return 0
+
+    def invitado_cerrar_todas(self, motivo):
+        n = 0
+        for r in self.reservas:
+            if r["fin"] is None:
+                r.update(fin=_ahora(), motivo=motivo)
+                n += 1
+        return n
+
+    def comandos_invitado(self, id_vehiculo):
+        u = self.unidades[id_vehiculo]
+        permitidos = {c["codigo"]: c for c in self.capacidades.get(u["id_modelo"], {}).values()
+                      if c["permitido_invitado"] or c["tipo"] == "paro"}
+        return [{"id_comando": c["id_comando"], "nombre": c["nombre"], "codigo": c["codigo"],
+                 "tipo": permitidos[c["codigo"]]["tipo"]}
+                for c in self.comandos.get(id_vehiculo, []) if c["activo"] and c["codigo"] in permitidos]
 
     def eliminar_vehiculo(self, id_vehiculo):
         self._anotar("sp_eliminar_vehiculo")

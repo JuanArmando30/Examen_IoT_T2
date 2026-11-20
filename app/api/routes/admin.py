@@ -19,7 +19,7 @@ from app.api.dependencies import (
 from app.api.documentacion import ADMIN_ESCRITURA, ADMIN_LECTURA, TAG_ADMIN
 from app.models.schemas import (
     AsignacionCrear, AsignacionFinalizar, AsignacionOut, AuditoriaOut,
-    CapacidadGuardar, CodigoRestablecimientoOut, DemoDetalleOut, PasosDemoGuardar, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
+    CapacidadGuardar, CodigoRestablecimientoOut, DemoDetalleOut, ExhibicionCambiar, ExhibicionOut, PasosDemoGuardar, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
     ModeloActualizar, ModeloCrear, ModeloOut, Pagina, UnidadActualizar,
     UnidadCrear, UnidadOut, UsuarioActualizar, UsuarioCrear, UsuarioOut,
 )
@@ -285,3 +285,29 @@ def guardar_pasos_fabrica(id_vehiculo: IdVehiculo, id_demo: IdDemo, cuerpo: Paso
     tocar DEMO privadas. **SP:** `sp_guardar_pasos_demo`, `sp_registrar_auditoria`."""
     return contenedor.demos.guardar_pasos(actor, id_vehiculo, id_demo,
                                           [p.model_dump() for p in cuerpo.pasos], "fabrica")
+
+
+# ----------------------------------------------------------------- Exhibición para invitados (Etapa 7)
+
+@router.get("/unidades/{id_vehiculo}/exhibicion", summary="Estado de la exhibición para invitados",
+            response_model=ExhibicionOut, responses=ADMIN_LECTURA)
+def estado_exhibicion(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _actor: ActorAdmin):
+    """Si la unidad está abierta a invitados y si hay una reserva en curso."""
+    return contenedor.invitados.estado_exhibicion(id_vehiculo)
+
+
+@router.post("/unidades/{id_vehiculo}/exhibicion", summary="Abrir o cerrar la exhibición a invitados",
+             response_model=ExhibicionOut, responses=ADMIN_ESCRITURA)
+async def cambiar_exhibicion(id_vehiculo: IdVehiculo, cuerpo: ExhibicionCambiar, contenedor: ContenedorDep,
+                             actor: ActorAdmin):
+    """Ábrela SOLO cuando haya alguien supervisando la unidad. Se cierra sola al
+    pasar las horas indicadas o si la API se reinicia. Cerrarla termina la reserva
+    en curso (DETENER). Solo unidades activas en estado «exhibición»."""
+    return await contenedor.invitados.cambiar_exhibicion(actor, id_vehiculo, cuerpo.abierta, cuerpo.horas)
+
+
+@router.post("/unidades/{id_vehiculo}/exhibicion/terminar", summary="Terminar la reserva del invitado",
+             response_model=ExhibicionOut, responses=ADMIN_ESCRITURA)
+async def terminar_reserva(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ActorAdmin):
+    """Termina de inmediato la reserva en curso: cancela la DEMO y envía DETENER."""
+    return await contenedor.invitados.terminar_por_admin(actor, id_vehiculo)

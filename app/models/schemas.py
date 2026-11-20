@@ -588,3 +588,77 @@ class DemoResumenOut(BaseModel):
 
 class DemoDetalleOut(DemoResumenOut):
     movimientos: List[MovimientoDemoOut]
+
+
+# ================== INVITADOS (Etapa 7) ==================
+
+
+class ReservaSolicitud(BaseModel):
+    id_vehiculo: int = Field(gt=0)
+
+
+class ExhibicionCambiar(BaseModel):
+    abierta: bool
+    horas: int = Field(default=2, ge=1, le=8, description="Cuánto tiempo queda abierta (1–8 h); se cierra sola.")
+
+
+class UnidadCatalogoOut(BaseModel):
+    id_vehiculo: int
+    nombre: str
+    descripcion: Optional[str] = None
+    es_simulada: bool
+    modelo: Optional[str] = None
+    modelo_descripcion: Optional[str] = None
+    microcontrolador: Optional[str] = None
+    conectado: Optional[bool] = None
+    exhibicion_abierta: bool
+    disponible: bool
+    segundos_reserva: int
+    minutos_reserva: int
+
+
+class ComandoInvitadoOut(BaseModel):
+    id_comando: int
+    nombre: str
+    codigo: int
+    tipo: Optional[str] = None
+
+
+class DemoInvitadoOut(BaseModel):
+    id_demo: int
+    nombre: str
+    descripcion: Optional[str] = None
+    pasos: int
+    duracion_total_ms: int
+
+
+class ReservaOut(BaseModel):
+    id_reserva: int
+    id_vehiculo: int
+    expira_en: datetime
+    segundos_restantes: int
+    latido_max_s: int
+    comandos: List[ComandoInvitadoOut]
+    demos: List[DemoInvitadoOut]
+
+
+class ReservaCreadaOut(ReservaOut):
+    token_invitado: str = Field(description="Guárdalo SOLO en memoria; se manda en la cabecera X-Invitado.")
+
+
+class LatidoOut(BaseModel):
+    segundos_restantes: int
+    en_demo: bool
+
+
+class ReservaVigenteOut(BaseModel):
+    id_reserva: int
+    expira_en: datetime
+    segundos_restantes: int
+
+
+class ExhibicionOut(BaseModel):
+    id_vehiculo: int
+    abierta: bool
+    abierta_hasta: Optional[datetime] = None
+    reserva: Optional[ReservaVigenteOut] = None

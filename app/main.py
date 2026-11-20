@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.documentacion import ETIQUETAS
 from app.api.routes import (
-    admin, auth, comandos, control, demos, estado, historial, movimientos, sistema, vehiculos, ws,
+    admin, auth, comandos, control, demos, estado, historial, invitado, movimientos, sistema, vehiculos, ws,
 )
 from app.contenedor import Contenedor
 from app.core.config import origenes_cors
@@ -61,14 +61,18 @@ def crear_app(fabrica_contenedor=Contenedor):
                 error.__class__.__name__,
             )
 
+        # Reservas de invitado: cierra las previas y arranca el vigilante (caducidad / desconexión).
+        await app.state.contenedor.invitados.iniciar()
+
         yield
 
+        await app.state.contenedor.invitados.cerrar()
         await app.state.contenedor.demo_ejecutor.cerrar()
 
     app = FastAPI(
         title="API Vehículo IoT",
         description=DESCRIPCION,
-        version="1.2.0",
+        version="1.3.0",
         openapi_tags=ETIQUETAS,
         lifespan=lifespan,
     )
@@ -80,7 +84,7 @@ def crear_app(fabrica_contenedor=Contenedor):
         CORSMiddleware,
         allow_origins=origenes_cors(),
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+        allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Invitado"],
         allow_credentials=False,
         max_age=600,
     )
@@ -109,7 +113,7 @@ def crear_app(fabrica_contenedor=Contenedor):
             content={"detail": "Error interno del servidor."},
         )
 
-    for modulo in (sistema, auth, vehiculos, comandos, estado, historial,
+    for modulo in (sistema, auth, invitado, vehiculos, comandos, estado, historial,
                    movimientos, demos, control, admin, ws):
         app.include_router(modulo.router)
 

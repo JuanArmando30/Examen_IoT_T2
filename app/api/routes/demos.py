@@ -1,3 +1,4 @@
+import asyncio
 from typing import List
 
 from fastapi import APIRouter
@@ -144,6 +145,9 @@ async def iniciar_demo(
     `sp_obtener_movimientos_demo`, `sp_obtener_comandos_vehiculo`,
     `sp_obtener_estado`, `sp_actualizar_estado`.
     """
+    contenedor.invitados.exigir_control(id_vehiculo, actor)
+    if actor.rol == "invitado":
+        await asyncio.to_thread(contenedor.invitados.exigir_demo, id_vehiculo, id_demo)
     return await contenedor.demo_ejecutor.iniciar(id_vehiculo, id_demo, actor)
 
 

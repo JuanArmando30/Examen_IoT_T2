@@ -208,7 +208,9 @@ def test_las_rutas_previas_siguen_en_swagger(cliente):
     nuevas = sum(len(v) for k, v in rutas.items() if k.startswith("/admin"))
     sesion = sum(len(v) for k, v in rutas.items() if k.startswith(("/auth", "/mis-vehiculos")))
     # Etapa 3: 21 /admin · Etapa 4: +1 /admin y 10 de sesión · Etapa 6: +1 /admin, +6 mis DEMO, +1 límites
-    assert nuevas == 23 and sesion == 16 and operaciones == 28 + 1 + 23 + 16
+    invitado = sum(len(v) for k, v in rutas.items() if k.startswith("/invitado"))
+    # Etapa 7: +3 /admin (exhibición) y 5 /invitado
+    assert nuevas == 26 and sesion == 16 and invitado == 5 and operaciones == 28 + 1 + 26 + 16 + 5
 
 
 def test_repositorio_falso_no_v009_por_defecto_es_coherente():

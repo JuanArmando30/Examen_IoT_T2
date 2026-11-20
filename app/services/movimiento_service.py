@@ -16,8 +16,8 @@ class MovimientoService:
         self.esquema = esquema
 
     def _con_autor(self, actor):
-        """Con V010 y un usuario identificado, el historial guarda quién movió."""
-        return (actor is not None and actor.id_usuario is not None
+        """Con V010 y un usuario (o invitado) identificado, el historial guarda quién movió."""
+        return (actor is not None and (actor.id_usuario is not None or actor.id_sesion is not None)
                 and self.esquema is not None and self.esquema.tiene_autenticacion())
 
     def registrar(self, id_vehiculo, id_comando=None, codigo=None,
@@ -45,7 +45,7 @@ class MovimientoService:
             tx.actualizar_estado(id_vehiculo, comando["id_comando"], conectado)
             if self._con_autor(actor):
                 tx.registrar_historial_autor(id_vehiculo, comando["id_comando"], origen,
-                                             actor.id_usuario, None)
+                                             actor.id_usuario, actor.id_sesion)
             else:
                 tx.registrar_historial(id_vehiculo, comando["id_comando"], origen)
         # <- COMMIT hecho. Recién ahora es seguro avisar por WebSocket.

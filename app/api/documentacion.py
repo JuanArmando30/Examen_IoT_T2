@@ -13,6 +13,7 @@ TAG_MOV_DEMO = "Movimientos de DEMO"
 TAG_ADMIN = "Administración"
 TAG_SESION = "Sesión"
 TAG_MIS = "Mis vehículos"
+TAG_INVITADO = "Invitado"
 
 ETIQUETAS = [
     {"name": TAG_SESION,
@@ -22,6 +23,9 @@ ETIQUETAS = [
     {"name": TAG_MIS,
      "description": "Unidades asignadas al comprador con sesión y autorización de "
                     "soporte (consentimiento temporal para que la empresa la opere)."},
+    {"name": TAG_INVITADO,
+     "description": "Visitante sin cuenta: catálogo público y reserva exclusiva y temporal de la "
+                    "unidad de exhibición (cuando la empresa la abre). Token en la cabecera X-Invitado."},
     {"name": TAG_ADMIN,
      "description": "Inventario de la empresa: modelos y sus capacidades, unidades "
                     "físicas, clientes, asignaciones, auditoría y métricas. Requiere la "

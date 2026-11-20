@@ -21,6 +21,12 @@ esquema_api_key = APIKeyHeader(
 )
 
 
+esquema_invitado = APIKeyHeader(
+    name="X-Invitado",
+    auto_error=False,
+    description="Token de la reserva de invitado (POST /invitado/reservar). Solo sirve para la unidad reservada.",
+)
+
 esquema_bearer = HTTPBearer(
     auto_error=False,
     description="Token de acceso de POST /auth/login (vigencia corta; se renueva con /auth/renovar).",
@@ -154,12 +160,18 @@ def actor_administrador(
 def autorizar_control_unidad(
     id_vehiculo: Annotated[int, Path(gt=0)],
     contenedor: ContenedorDep, clave: ClaveDep, principal: PrincipalOpcional,
+    token_invitado: Annotated[Optional[str], Depends(esquema_invitado)] = None,
 ) -> Actor:
     """CONTROL de UNA unidad (mover, iniciar/cancelar DEMO).
 
+    - Invitado (X-Invitado): solo la unidad de SU reserva vigente.
     - Con token: autorización por unidad (dueño; admin según estado/soporte).
     - Transición: clave X-API-Key válida, o sin nada si CONTROL_ABIERTO=true.
+    La exclusividad de una reserva de invitado se aplica en cada ruta
+    (contenedor.invitados.exigir_control) porque DETENER siempre debe pasar.
     """
+    if token_invitado:
+        return contenedor.invitados.actor(token_invitado, id_vehiculo)
     if principal is not None:
         contenedor.auth.exigir_acceso_unidad(principal, id_vehiculo)
         return principal.actor()
@@ -218,3 +230,14 @@ IdMovimiento = Annotated[
     Path(gt=0, description="Identificador del movimiento de la DEMO",
          examples=[1]),
 ]
+
+
+def token_invitado(
+    token: Annotated[Optional[str], Depends(esquema_invitado)],
+) -> str:
+    if not token:
+        raise NoAutorizado("Falta la cabecera X-Invitado de tu reserva.")
+    return token
+
+
+TokenInvitado = Annotated[str, Depends(token_invitado)]

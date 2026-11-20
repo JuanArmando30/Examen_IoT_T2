@@ -1,7 +1,8 @@
 """Capa de acceso a los procedimientos almacenados de vehiculo_iot.
 
 Los 21 originales (prácticas 2.3/2.4), los 25 de ADMINISTRACIÓN (V009),
-los 14 de AUTENTICACIÓN (V010) y los 3 de DEMO PRIVADAS (V011).
+los 14 de AUTENTICACIÓN (V010), los 3 de DEMO PRIVADAS (V011) y los 6 de
+INVITADOS (V012).
 Responsabilidad única: ejecutar SP con parámetros enlazados y devolver
 filas como diccionarios. Aquí NO hay reglas de negocio (eso vive en
 app/services) ni código HTTP.
@@ -117,10 +118,16 @@ PROCEDIMIENTOS_V011_LECTURA = frozenset({"sp_limites_unidad"})
 PROCEDIMIENTOS_V011_ESCRITURA = frozenset({"sp_crear_demo_privada", "sp_guardar_pasos_demo"})
 PROCEDIMIENTOS_V011 = PROCEDIMIENTOS_V011_LECTURA | PROCEDIMIENTOS_V011_ESCRITURA
 
+# --- V012 · Invitados y reserva de exhibición ----------------------------------
+
+PROCEDIMIENTOS_V012_LECTURA = frozenset({"sp_catalogo_exhibicion", "sp_invitado_sesion", "sp_comandos_invitado"})
+PROCEDIMIENTOS_V012_ESCRITURA = frozenset({"sp_invitado_reservar", "sp_invitado_finalizar", "sp_invitado_cerrar_todas"})
+PROCEDIMIENTOS_V012 = PROCEDIMIENTOS_V012_LECTURA | PROCEDIMIENTOS_V012_ESCRITURA
+
 PROCEDIMIENTOS_NUEVOS = (PROCEDIMIENTOS_V009_LECTURA | PROCEDIMIENTOS_V009_ESCRITURA
-                         | PROCEDIMIENTOS_V010 | PROCEDIMIENTOS_V011)
+                         | PROCEDIMIENTOS_V010 | PROCEDIMIENTOS_V011 | PROCEDIMIENTOS_V012)
 _ESCRITURA = (PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA | PROCEDIMIENTOS_V010_ESCRITURA
-              | PROCEDIMIENTOS_V011_ESCRITURA)
+              | PROCEDIMIENTOS_V011_ESCRITURA | PROCEDIMIENTOS_V012_ESCRITURA)
 PROCEDIMIENTOS_PERMITIDOS = PROCEDIMIENTOS_ORIGINALES | PROCEDIMIENTOS_NUEVOS
 
 # Errores de MySQL que significan "no hay conexión / sin acceso".
@@ -565,6 +572,32 @@ class _ProcedimientosSP:
         """Reemplaza todos los pasos (validados en el SP). Devuelve {pasos, duracion_total_ms}."""
         registros = self._llamar("sp_guardar_pasos_demo", (id_demo, pasos_json))
         return registros[0] if registros else {"pasos": 0, "duracion_total_ms": 0}
+
+    # ================= V012 · INVITADOS =================
+
+    def catalogo_exhibicion(self):
+        return self._llamar("sp_catalogo_exhibicion")
+
+    def invitado_reservar(self, id_vehiculo, hash_token, red_hash, minutos, max_por_hora, enfriamiento_min):
+        """Devuelve {resultado: ok|no_disponible|ocupada|limite|enfriamiento, id_sesion, id_reserva, expira_en, segundos}."""
+        registros = self._llamar("sp_invitado_reservar",
+                                 (id_vehiculo, hash_token, red_hash, minutos, max_por_hora, enfriamiento_min))
+        return registros[0] if registros else {"resultado": "no_disponible", "segundos": 0}
+
+    def invitado_sesion(self, hash_token):
+        registros = self._llamar("sp_invitado_sesion", (hash_token,))
+        return registros[0] if registros else None
+
+    def invitado_finalizar(self, id_reserva, motivo):
+        registros = self._llamar("sp_invitado_finalizar", (id_reserva, motivo))
+        return int(registros[0]["finalizadas"]) if registros else 0
+
+    def invitado_cerrar_todas(self, motivo):
+        registros = self._llamar("sp_invitado_cerrar_todas", (motivo,))
+        return int(registros[0]["finalizadas"]) if registros else 0
+
+    def comandos_invitado(self, id_vehiculo):
+        return self._llamar("sp_comandos_invitado", (id_vehiculo,))
 
 
 class TransaccionSP(_ProcedimientosSP):

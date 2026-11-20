@@ -40,12 +40,19 @@ async def registrar_movimiento(
     `sp_obtener_comandos_vehiculo`, `sp_obtener_estado`,
     `sp_actualizar_estado`, `sp_registrar_historial`.
     """
+    detener = await asyncio.to_thread(contenedor.comandos.buscar_detener, id_vehiculo)
+    es_detener = detener is not None and (
+        cuerpo.id_comando == detener["id_comando"] or cuerpo.codigo == detener["codigo"])
+
+    # Reserva de invitado (Etapa 7): exclusiva salvo DETENER; el invitado solo
+    # usa los comandos que su modelo le permite.
+    contenedor.invitados.exigir_control(id_vehiculo, actor, es_detener)
+    if actor.rol == "invitado":
+        contenedor.invitados.exigir_comando(id_vehiculo, cuerpo.id_comando, cuerpo.codigo)
+
     if contenedor.demo_ejecutor.esta_ejecutando(id_vehiculo):
         # DETENER tiene prioridad: cancela la DEMO y se registra. Cualquier
         # otro movimiento se rechaza mientras corre la DEMO.
-        detener = await asyncio.to_thread(contenedor.comandos.buscar_detener, id_vehiculo)
-        es_detener = detener is not None and (
-            cuerpo.id_comando == detener["id_comando"] or cuerpo.codigo == detener["codigo"])
         if not es_detener:
             raise ConflictoNegocio(
                 "El vehículo está ejecutando una DEMO. Cancélala (o envía DETENER) "

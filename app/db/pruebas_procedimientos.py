@@ -350,9 +350,89 @@ def probar_v011(ex, base):
     _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
 
 
+def probar_v012(ex, base):
+    ex.usar(base)
+    antes = ex.conteos(base)
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 12, "sp_version_esquema debe ser 12 o más")
+    # Ninguna prueba debe chocar con una reserva real que hubiera en la copia.
+    ex.llamar("sp_invitado_cerrar_todas", ("detenida",))
+
+    m = int(ex.llamar("sp_crear_modelo", ("Modelo V012", "Para invitados", "ESP32", 3000, 5000, 10, 60000))[0]["id_modelo"])
+    ex.llamar("sp_guardar_capacidad", (m, "AVANZAR", 1, None, "movimiento", 1))
+    ex.llamar("sp_guardar_capacidad", (m, "LUZ", 10, None, "accesorio", 0))
+    ex.llamar("sp_guardar_capacidad", (m, "DETENER", 9, None, "paro", 1))
+    ve = int(ex.llamar("sp_crear_unidad", (m, "Exhibición V012", None, None, "exhibicion", 1))[0]["id_vehiculo"])
+    vi = int(ex.llamar("sp_crear_unidad", (m, "Inventario V012", None, None, "inventario", 1))[0]["id_vehiculo"])
+    h = lambda t: hashlib.sha256(f"v012-{t}".encode()).hexdigest()   # noqa: E731
+    redes = [h("red1"), h("red2"), h("red3")]
+
+    catalogo = {f["id_vehiculo"]: f for f in ex.llamar("sp_catalogo_exhibicion")}
+    _afirmar(ve in catalogo and vi not in catalogo, "el catálogo solo muestra unidades en exhibición")
+    _afirmar(catalogo[ve]["reservada_hasta"] is None and catalogo[ve]["modelo"] == "Modelo V012", f"catálogo: {catalogo[ve]}")
+
+    def reservar(v, token, red, minutos=5, por_hora=3, enfriamiento=10):
+        return ex.llamar("sp_invitado_reservar", (v, h(token), red, minutos, por_hora, enfriamiento))[0]
+
+    # ---- Solo unidades en exhibición (nunca la de un comprador ni una en inventario)
+    _afirmar(reservar(vi, "t0", redes[0])["resultado"] == "no_disponible", "unidad en inventario")
+    _afirmar(reservar(999999, "t0", redes[0])["resultado"] == "no_disponible", "unidad inexistente")
+
+    # ---- Reserva exclusiva
+    r1 = reservar(ve, "t1", redes[0])
+    _afirmar(r1["resultado"] == "ok" and r1["segundos"] == 300 and r1["id_reserva"], f"reservar: {r1}")
+    ocupada = reservar(ve, "t2", redes[1])
+    _afirmar(ocupada["resultado"] == "ocupada" and 0 < ocupada["segundos"] <= 300, f"ocupada: {ocupada}")
+    fila = next(f for f in ex.llamar("sp_catalogo_exhibicion") if f["id_vehiculo"] == ve)
+    _afirmar(fila["reservada_hasta"] is not None and fila["segundos_reserva"] > 0, f"el catálogo muestra la reserva: {fila}")
+    s = ex.llamar("sp_invitado_sesion", (h("t1"),))
+    _afirmar(len(s) == 1 and s[0]["id_vehiculo"] == ve and s[0]["segundos_restantes"] > 290, f"sesión vigente: {s}")
+    _afirmar(ex.llamar("sp_invitado_sesion", (h("t2"),)) == [], "un token sin reserva no tiene sesión")
+
+    # ---- Comandos permitidos: AVANZAR y DETENER, no LUZ
+    _afirmar({c["codigo"] for c in ex.llamar("sp_comandos_invitado", (ve,))} == {1, 9}, "comandos de invitado")
+
+    # ---- Terminar
+    _afirmar(ex.llamar("sp_invitado_finalizar", (r1["id_reserva"], "cancelada"))[0]["finalizadas"] == 1, "finalizar")
+    _afirmar(ex.llamar("sp_invitado_finalizar", (r1["id_reserva"], "cancelada"))[0]["finalizadas"] == 0, "finalizar dos veces")
+    _afirmar(ex.llamar("sp_invitado_sesion", (h("t1"),)) == [], "tras terminar ya no hay sesión")
+
+    # ---- Abuso desde la misma red: enfriamiento y límite por hora
+    e = reservar(ve, "t3", redes[0])
+    _afirmar(e["resultado"] == "enfriamiento" and e["segundos"] > 500, f"enfriamiento: {e}")
+    lim = reservar(ve, "t3", redes[0], por_hora=1, enfriamiento=0)
+    _afirmar(lim["resultado"] == "limite" and lim["segundos"] > 0, f"límite por hora: {lim}")
+
+    # ---- Una reserva vencida se cierra sola al reservar otro invitado
+    r2 = reservar(ve, "t4", redes[1])
+    _afirmar(r2["resultado"] == "ok", f"otra red sí puede: {r2}")
+    ex.ejecutar("UPDATE reservas_exhibicion SET inicio = UTC_TIMESTAMP() - INTERVAL 10 MINUTE, "
+                "expira_en = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE id_reserva = %s", (r2["id_reserva"],))
+    _afirmar(ex.llamar("sp_invitado_sesion", (h("t4"),)) == [], "una reserva vencida no da sesión")
+    r3 = reservar(ve, "t5", redes[2])
+    _afirmar(r3["resultado"] == "ok", f"tras vencer, la unidad queda libre: {r3}")
+    _afirmar(ex.valor("SELECT motivo_fin FROM reservas_exhibicion WHERE id_reserva = %s", (r2["id_reserva"],)) == "expirada",
+             "la vencida queda como «expirada»")
+
+    # ---- Al arrancar la API se cierran todas
+    _afirmar(ex.llamar("sp_invitado_cerrar_todas", ("detenida",))[0]["finalizadas"] >= 1, "cerrar todas")
+    _afirmar(ex.llamar("sp_invitado_sesion", (h("t5"),)) == [], "tras cerrar todas no queda sesión")
+
+    # ---- Limpieza
+    ex.ejecutar("DELETE r FROM reservas_exhibicion r JOIN sesiones_invitado s ON s.id_sesion = r.id_sesion "
+                "WHERE s.red_hash IN (%s, %s, %s)", tuple(redes))
+    ex.ejecutar("DELETE FROM sesiones_invitado WHERE red_hash IN (%s, %s, %s)", tuple(redes))
+    ex.llamar("sp_eliminar_vehiculo", (ve,))
+    ex.llamar("sp_eliminar_vehiculo", (vi,))
+    ex.ejecutar("DELETE FROM modelo_comandos WHERE id_modelo = %s", (m,))
+    ex.ejecutar("DELETE FROM modelos_vehiculo WHERE id_modelo = %s", (m,))
+    despues = ex.conteos(base)
+    _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
+
+
 # versión → función(ejecutor, base_de_la_copia)
 PRUEBAS = {
     "V009": probar_v009,
     "V010": probar_v010,
     "V011": probar_v011,
+    "V012": probar_v012,
 }
