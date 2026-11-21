@@ -251,3 +251,48 @@ def test_la_empresa_ve_el_catalogo_de_la_vendida_pero_no_su_historial(repo, prod
     assert _mover(prod, uv, 1, admin).status_code == 403                               # sin soporte no la mueve
     assert prod.get(f"/vehiculos/{uv}/comandos", headers=comprador).status_code == 200
     assert prod.post(f"/vehiculos/{uv}/comandos/1/eliminar", headers=comprador).status_code == 403
+
+
+def _id_cmd(repo, v, codigo):
+    return next(c["id_comando"] for c in repo.comandos[v] if c["codigo"] == codigo)
+
+
+def test_la_empresa_bloquea_movimientos_de_la_vendida_sin_soporte(repo, prod):
+    """El administrador bloquea un movimiento de CUALQUIER unidad sin la autorización del cliente;
+    el cliente deja de poder usarlo y no puede desbloquearlo. DETENER no se bloquea."""
+    ve, uv, admin, comprador = _escenario(repo, prod)
+    repo.unidades[uv]["estado_comercial"] = "vendida"
+    avanzar, detener = _id_cmd(repo, uv, 1), _id_cmd(repo, uv, 9)
+    url = f"/admin/unidades/{uv}/comandos/{avanzar}/bloqueo"
+    assert _mover(prod, uv, 1, comprador).status_code == 201
+
+    r = prod.post(url, json={"bloqueado": True}, headers=admin)                    # sin soporte del cliente
+    assert r.status_code == 200, r.text
+    assert r.json()["activo"] is False
+    m = _mover(prod, uv, 1, comprador)
+    assert m.status_code == 409 and "bloqueado" in m.json()["detail"]
+    assert _mover(prod, uv, 9, comprador).status_code == 201                       # DETENER sigue
+    assert prod.post(url, json={"bloqueado": False}, headers=comprador).status_code == 403
+    assert prod.post(f"/vehiculos/{uv}/comandos/{avanzar}/actualizar", headers=comprador,
+                     json={"nombre": "AVANZAR", "codigo": 1, "activo": True}).status_code == 403
+    assert prod.post(url, json={"bloqueado": False}).status_code == 401
+    r = prod.post(f"/admin/unidades/{uv}/comandos/{detener}/bloqueo", json={"bloqueado": True}, headers=admin)
+    assert r.status_code == 409
+    assert any(a["accion"] == "comando.bloquear" for a in repo.auditoria)
+
+    assert prod.post(url, json={"bloqueado": False}, headers=admin).json()["activo"] is True
+    assert _mover(prod, uv, 1, comprador).status_code == 201
+    assert prod.post(f"/admin/unidades/{uv}/comandos/9999/bloqueo", json={"bloqueado": True},
+                     headers=admin).status_code == 404
+
+
+def test_el_bloqueo_alcanza_al_invitado_en_curso(repo, prod):
+    ve, _, admin, _ = _escenario(repo, prod)
+    _abrir(prod, ve, admin)
+    h = _inv(_reservar(prod, ve).json()["token_invitado"])
+    assert _mover(prod, ve, 1, h).status_code == 201
+    assert prod.post(f"/admin/unidades/{ve}/comandos/{_id_cmd(repo, ve, 1)}/bloqueo",
+                     json={"bloqueado": True}, headers=admin).status_code == 200
+    assert 1 not in [c["codigo"] for c in prod.get("/invitado/estado", headers=h).json()["comandos"]]
+    assert _mover(prod, ve, 1, h).status_code in (403, 409)
+    assert _mover(prod, ve, 9, h).status_code == 201

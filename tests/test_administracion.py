@@ -210,8 +210,8 @@ def test_las_rutas_previas_siguen_en_swagger(cliente):
     # Etapa 3: 21 /admin · Etapa 4: +1 /admin y 10 de sesión · Etapa 6: +1 /admin, +6 mis DEMO, +1 límites
     invitado = sum(len(v) for k, v in rutas.items() if k.startswith("/invitado"))
     # Etapa 7: +3 /admin (exhibición) y 5 /invitado
-    # Etapa 8: +3 /admin (dispositivo) y POST /ws/ticket
-    assert nuevas == 29 and sesion == 16 and invitado == 5 and operaciones == 28 + 1 + 29 + 16 + 5 + 1
+    # Etapa 8: +3 /admin (dispositivo) y POST /ws/ticket · Ajustes: +1 /admin (bloqueo de movimientos)
+    assert nuevas == 30 and sesion == 16 and invitado == 5 and operaciones == 28 + 1 + 30 + 16 + 5 + 1
 
 
 def test_repositorio_falso_no_v009_por_defecto_es_coherente():

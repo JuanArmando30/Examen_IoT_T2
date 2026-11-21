@@ -16,6 +16,7 @@ DEMO_INICIADA = "demo_iniciada"
 DEMO_MOVIMIENTO = "demo_movimiento"
 DEMO_FINALIZADA = "demo_finalizada"
 DEMO_CANCELADA = "demo_cancelada"
+CATALOGO_ACTUALIZADO = "catalogo_actualizado"     # la empresa bloqueó/desbloqueó un movimiento
 ERROR = "error"
 PONG = "pong"
 

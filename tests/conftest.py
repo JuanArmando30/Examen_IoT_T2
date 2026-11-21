@@ -80,6 +80,12 @@ class RepositorioFalso:
     def obtener_comandos_vehiculo(self, id_vehiculo):
         return list(self.comandos.get(id_vehiculo, []))
 
+    def actualizar_comando(self, id_comando, nombre, codigo, descripcion, activo):
+        for cs in self.comandos.values():
+            for c in cs:
+                if c["id_comando"] == id_comando:
+                    c.update(nombre=nombre, codigo=codigo, descripcion=descripcion, activo=bool(activo))
+
     def obtener_estado(self, id_vehiculo):
         return self.estados.get(id_vehiculo)
 

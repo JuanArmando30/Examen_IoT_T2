@@ -256,7 +256,7 @@ class DemoService:
         for i, p in enumerate(pasos, start=1):
             c = catalogo.get(p["id_comando"])
             if c is None or not c["activo"]:
-                raise SolicitudInvalida(f"Paso {i}: el comando no existe en esta unidad o está inactivo.")
+                raise SolicitudInvalida(f"Paso {i}: el comando no existe en esta unidad o está bloqueado.")
         self.validar_limites(id_vehiculo, pasos)
 
         r = self.repositorio.guardar_pasos_demo(id_demo, json.dumps(
@@ -300,7 +300,7 @@ class DemoService:
 
         if inactivos:
             raise ConflictoNegocio(
-                "La DEMO usa comandos inactivos o ajenos al vehículo: "
+                "La DEMO usa movimientos bloqueados o ajenos a la unidad: "
                 + ", ".join(inactivos)
             )
 

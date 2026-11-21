@@ -6,6 +6,7 @@ la base aún no tiene las migraciones V001–V009. Convención de la API existen
 GET consulta y POST …/actualizar, POST …/baja, POST …/finalizar escriben.
 El administrador gestiona el inventario; NO obtiene aquí control de las
 unidades vendidas (eso exigirá la autorización de soporte del comprador).
+Excepción: BLOQUEAR movimientos de cualquier unidad (la empresa es la dueña inicial).
 """
 
 from datetime import datetime
@@ -14,11 +15,11 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Query, Response
 
 from app.api.dependencies import (
-    ActorAdmin, ContenedorDep, IdAsignacion, IdDemo, IdModelo, IdUsuario, IdVehiculo,
+    ActorAdmin, ContenedorDep, IdAsignacion, IdComando, IdDemo, IdModelo, IdUsuario, IdVehiculo,
 )
 from app.api.documentacion import ADMIN_ESCRITURA, ADMIN_LECTURA, TAG_ADMIN
 from app.models.schemas import (
-    AsignacionCrear, AsignacionFinalizar, AsignacionOut, AuditoriaOut,
+    AsignacionCrear, AsignacionFinalizar, AsignacionOut, AuditoriaOut, BloqueoComando, ComandoOut,
     CapacidadGuardar, CodigoRestablecimientoOut, DemoDetalleOut, DispositivoOut, ExhibicionCambiar, ExhibicionOut,
     PasosDemoGuardar, SecretoDispositivoOut, CapacidadOut, EstadoComercial, MensajeOut, MetricasOut,
     ModeloActualizar, ModeloCrear, ModeloOut, Pagina, UnidadActualizar,
@@ -312,6 +313,25 @@ async def cambiar_exhibicion(id_vehiculo: IdVehiculo, cuerpo: ExhibicionCambiar,
 async def terminar_reserva(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ActorAdmin):
     """Termina de inmediato la reserva en curso: cancela la DEMO y envía DETENER."""
     return await contenedor.invitados.terminar_por_admin(actor, id_vehiculo)
+
+
+# ----------------------------------------------------------------- Bloqueo de movimientos
+
+@router.post("/unidades/{id_vehiculo}/comandos/{id_comando}/bloqueo",
+             summary="Bloquear o desbloquear un movimiento de una unidad",
+             response_model=ComandoOut, responses=ADMIN_ESCRITURA)
+async def bloquear_comando(id_vehiculo: IdVehiculo, id_comando: IdComando, cuerpo: BloqueoComando,
+                           contenedor: ContenedorDep, actor: ActorAdmin):
+    """Funciona en **cualquier** unidad (inventario, exhibición o vendida) y **sin** la
+    autorización de soporte del cliente: la empresa es la dueña inicial del producto.
+
+    Un movimiento bloqueado lo rechaza la API a todos (cliente, invitado y DEMO) y
+    la página de Control lo deshabilita al instante (evento WSS `catalogo_actualizado`).
+    Si una DEMO en curso lo usa, se detiene. DETENER no se puede bloquear (409).
+    El cliente no puede desbloquearlo. Queda en la auditoría.
+
+    **SP:** `sp_obtener_comandos_vehiculo`, `sp_actualizar_comando`, `sp_registrar_auditoria`."""
+    return await contenedor.bloqueos.cambiar(actor, id_vehiculo, id_comando, cuerpo.bloqueado)
 
 
 # ----------------------------------------------------------------- Dispositivo (Etapa 8)

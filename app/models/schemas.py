@@ -597,6 +597,10 @@ class ReservaSolicitud(BaseModel):
     id_vehiculo: int = Field(gt=0)
 
 
+class BloqueoComando(BaseModel):
+    bloqueado: bool = Field(description="true bloquea el movimiento en la unidad; false lo vuelve a habilitar.")
+
+
 class ExhibicionCambiar(BaseModel):
     abierta: bool
     horas: int = Field(default=2, ge=1, le=8, description="Cuánto tiempo queda abierta (1–8 h); se cierra sola.")

@@ -98,6 +98,12 @@ class InvitadoService:
         r = self._activas.get(id_vehiculo)
         return r if r is not None and r.segundos() > 0 else None
 
+    def refrescar_comandos(self, id_vehiculo):
+        """La empresa bloqueó/desbloqueó un movimiento: la reserva en curso lo refleja ya."""
+        r = self.reserva_de(id_vehiculo)
+        if r is not None:
+            r.comandos = {c["id_comando"]: c for c in self.repositorio.comandos_invitado(id_vehiculo)}
+
     def _por_token(self, token):
         if not token or not self.auth.configurado:
             return None
