@@ -67,7 +67,7 @@ def test_reserva_exclusiva_y_comandos_permitidos(repo, cliente):
     datos = r.json()
     token = datos["token_invitado"]
     assert token not in str(repo.reservas)                             # en la base solo su huella
-    assert {c["codigo"] for c in datos["comandos"]} == {1, 9} and datos["segundos_restantes"] > 290
+    assert {c["codigo"] for c in datos["comandos"]} == {1, 9} and 50 < datos["segundos_restantes"] <= 60    # 1 minuto
     assert cliente.get("/invitado/catalogo").json()[0]["disponible"] is False
     assert _reservar(cliente, ve).status_code == 409                   # ocupada (sin fila)
 
@@ -174,3 +174,4 @@ def test_reserva_propia_y_sin_espera_tras_desconexion(repo, cliente):
     assert _esperar(lambda: ve not in servicio._activas)
     assert repo.reservas[-1]["motivo"] == "desconexion"
     assert _reservar(cliente, ve).status_code == 201                    # sin los 10 min de espera
+

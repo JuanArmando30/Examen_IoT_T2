@@ -5,7 +5,7 @@ from fastapi import APIRouter
 
 from app.api.dependencies import (
     Administrador, ContenedorDep, ControlUnidad, IdDemo, IdMovimiento, IdVehiculo,
-    LecturaUnidad, Operador,
+    LecturaOInvitado, LecturaUnidad, Operador,
 )
 from app.api.documentacion import (
     BORRADO, ESCRITURA, LECTURA, TAG_DEMO, TAG_MOV_DEMO,
@@ -58,7 +58,7 @@ def crear_demo(
     response_model=DemoEjecucionOut, responses=LECTURA,
 )
 def estado_ejecucion(id_vehiculo: IdVehiculo, contenedor: ContenedorDep,
-                     _lectura: LecturaUnidad):
+                     _lectura: LecturaOInvitado):
     """Estado en memoria de la ejecución (no consulta RDS salvo la
     existencia del vehículo: `sp_obtener_vehiculo`)."""
     contenedor.vehiculos.obtener_o_fallar(id_vehiculo)

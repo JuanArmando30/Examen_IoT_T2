@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter
 
 from app.api.dependencies import (
-    Administrador, ContenedorDep, IdComando, IdVehiculo, LecturaUnidad, Operador,
+    Administrador, ContenedorDep, IdComando, IdVehiculo, LecturaCatalogo, Operador,
 )
 from app.api.documentacion import BORRADO, ESCRITURA, LECTURA, TAG_COMANDOS
 from app.models.schemas import (
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/vehiculos/{id_vehiculo}/comandos",
     responses=LECTURA,
 )
 def listar_comandos(id_vehiculo: IdVehiculo, contenedor: ContenedorDep,
-                    _lectura: LecturaUnidad):
+                    _lectura: LecturaCatalogo):
     """**Stored Procedures:** `sp_obtener_vehiculo` (existencia) y
     `sp_obtener_comandos_vehiculo`.
 

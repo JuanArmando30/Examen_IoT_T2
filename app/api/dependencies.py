@@ -203,9 +203,37 @@ def autorizar_lectura_unidad(
     raise NoAutorizado()
 
 
+def autorizar_lectura_o_invitado(
+    id_vehiculo: Annotated[int, Path(gt=0)],
+    contenedor: ContenedorDep, clave: ClaveDep, principal: PrincipalOpcional,
+    token_invitado: Annotated[Optional[str], Depends(esquema_invitado)] = None,
+) -> None:
+    """Lectura que también necesita el INVITADO en la página de Control (p. ej. si
+    hay una DEMO en curso): solo la unidad de SU reserva vigente. El historial y
+    el resto de lecturas siguen sin abrirse al invitado."""
+    if token_invitado:
+        contenedor.invitados.actor(token_invitado, id_vehiculo)
+        return
+    autorizar_lectura_unidad(id_vehiculo, contenedor, clave, principal)
+
+
+def autorizar_catalogo_unidad(
+    id_vehiculo: Annotated[int, Path(gt=0)],
+    contenedor: ContenedorDep, clave: ClaveDep, principal: PrincipalOpcional,
+) -> None:
+    """Catálogo de comandos de una unidad. La empresa lo ve en TODAS sus unidades
+    (también las vendidas: es la ficha técnica del producto, no datos del cliente).
+    Moverla o ver su historial sigue exigiendo las reglas de siempre."""
+    if principal is not None and principal.es_admin:
+        return
+    autorizar_lectura_unidad(id_vehiculo, contenedor, clave, principal)
+
+
 ActorAdmin = Annotated[Actor, Depends(actor_administrador)]
 ControlUnidad = Annotated[Actor, Depends(autorizar_control_unidad)]
 LecturaUnidad = Annotated[None, Depends(autorizar_lectura_unidad)]
+LecturaOInvitado = Annotated[None, Depends(autorizar_lectura_o_invitado)]
+LecturaCatalogo = Annotated[None, Depends(autorizar_catalogo_unidad)]
 IdModelo = Annotated[
     int, Path(gt=0, description="Identificador del modelo", examples=[1])
 ]

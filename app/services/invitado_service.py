@@ -31,9 +31,9 @@ from app.websocket import eventos
 
 logger = logging.getLogger(__name__)
 
-MINUTOS_RESERVA = 5
-MAX_RESERVAS_POR_HORA = 3
-ENFRIAMIENTO_MIN = 10
+MINUTOS_RESERVA = 1                 # prueba corta: 1 minuto
+MAX_RESERVAS_POR_HORA = 5
+ENFRIAMIENTO_MIN = 3                # espera tras usarla o terminarla (no tras una desconexión, V014)
 LATIDO_MAX_S = 15            # sin latido durante este tiempo → «desconexión»
 VIGILANCIA_S = 1
 MAX_HORAS_EXHIBICION = 8

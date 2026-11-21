@@ -92,6 +92,7 @@ class RepositorioFalso:
 
     def registrar_historial(self, id_vehiculo, id_comando, origen):
         self._anotar("sp_registrar_historial")
+        self._al_historial(id_vehiculo, id_comando, origen)
 
     @contextmanager
     def transaccion(self):
@@ -528,6 +529,15 @@ class RepositorioFalso:
     def registrar_historial_autor(self, id_vehiculo, id_comando, origen, id_usuario, id_sesion):
         self._anotar("sp_registrar_historial_autor")
         self.historial_autor.append((id_vehiculo, id_comando, id_usuario))
+        self._al_historial(id_vehiculo, id_comando, origen)
+
+    def _al_historial(self, id_vehiculo, id_comando, origen):
+        """Como el SP real: el movimiento queda en el historial (más reciente primero)."""
+        c = next((x for x in self.comandos.get(id_vehiculo, []) if x["id_comando"] == id_comando), None)
+        lista = self.historial.setdefault(id_vehiculo, [])
+        lista.insert(0, {"id_historial": 1000 + sum(len(v) for v in self.historial.values()), "id_vehiculo": id_vehiculo,
+                         "comando": c["nombre"] if c else None, "codigo": c["codigo"] if c else None,
+                         "fecha_hora": datetime.now(), "origen": origen})
 
     def mis_vehiculos(self, id_usuario):
         return [{"id_vehiculo": a["id_vehiculo"], "nombre": self.unidades[a["id_vehiculo"]]["nombre"],

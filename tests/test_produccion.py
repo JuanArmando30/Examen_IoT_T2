@@ -13,6 +13,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.core.config import AuthSettings
 from tests.conftest import ADMIN, OPERADOR, SECRETO, construir_cliente
 from tests.test_autenticacion import CLAVE, _bearer, _usuario
+from tests.test_invitados import _abrir, _escenario, _inv, _reservar
 
 PRODUCCION = {"auth": AuthSettings(secreto=SECRETO, lectura_abierta=False, ws_abierto=False),
               "control_abierto": False, "clave_habilitada": False}
@@ -226,3 +227,27 @@ def test_entradas_invalidas_y_maliciosas(repo, prod):
     r = prod.post(f"/mis-vehiculos/{w['ua']}/demos/{d}/pasos",
                   json={"pasos": [{"id_comando": 101, "duracion_ms": 600000}]}, headers=A)
     assert r.status_code == 400
+
+
+# ---- Ajustes posteriores: control completo del invitado y catálogo para la empresa
+
+def test_invitado_lee_la_ejecucion_de_su_unidad_y_nada_mas(repo, prod):
+    """Control completo del invitado: puede saber si corre una DEMO en SU unidad; no el historial ni otra unidad."""
+    ve, uv, admin, _ = _escenario(repo, prod)
+    _abrir(prod, ve, admin)
+    h = _inv(_reservar(prod, ve).json()["token_invitado"])
+    assert prod.get(f"/vehiculos/{ve}/demos/ejecucion", headers=h).status_code == 200
+    assert prod.get(f"/vehiculos/{uv}/demos/ejecucion", headers=h).status_code == 403
+    assert prod.get(f"/vehiculos/{ve}/historial", headers=h).status_code == 401      # el historial no se abre
+    assert prod.post(f"/vehiculos/{ve}/movimientos", json={"codigo": 1, "origen": "WEB_JOYSTICK"},
+                        headers=h).status_code == 201                                     # cualquier modo (origen)
+
+
+def test_la_empresa_ve_el_catalogo_de_la_vendida_pero_no_su_historial(repo, prod):
+    ve, uv, admin, comprador = _escenario(repo, prod)
+    repo.unidades[uv]["estado_comercial"] = "vendida"
+    assert prod.get(f"/vehiculos/{uv}/comandos", headers=admin).status_code == 200
+    assert prod.get(f"/vehiculos/{uv}/historial", headers=admin).status_code == 403
+    assert _mover(prod, uv, 1, admin).status_code == 403                               # sin soporte no la mueve
+    assert prod.get(f"/vehiculos/{uv}/comandos", headers=comprador).status_code == 200
+    assert prod.post(f"/vehiculos/{uv}/comandos/1/eliminar", headers=comprador).status_code == 403
