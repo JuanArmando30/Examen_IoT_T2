@@ -69,7 +69,7 @@ class VehiculoService:
         if (self.esquema is not None and self.esquema.tiene_administracion()
                 and self.repositorio.obtener_historial_reciente(id_vehiculo, 1)):
             raise ConflictoNegocio(
-                "La unidad tiene movimientos en el historial: dala de baja "
-                "(POST /admin/unidades/{id}/baja) para conservarlos."
+                "La unidad tiene movimientos en el historial: primero dala de baja "
+                "en Inventario (conserva el historial) y después podrás eliminarla definitivamente."
             )
         self.repositorio.eliminar_vehiculo(id_vehiculo)

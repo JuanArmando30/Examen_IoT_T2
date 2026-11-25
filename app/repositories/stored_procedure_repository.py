@@ -130,10 +130,17 @@ PROCEDIMIENTOS_V013_LECTURA = frozenset({"sp_dispositivo_estado"})
 PROCEDIMIENTOS_V013_ESCRITURA = frozenset({"sp_dispositivo_crear", "sp_dispositivo_validar", "sp_dispositivo_revocar"})
 PROCEDIMIENTOS_V013 = PROCEDIMIENTOS_V013_LECTURA | PROCEDIMIENTOS_V013_ESCRITURA
 
+# --- V015 · Eliminar definitivamente una unidad dada de baja ----------------
+
+PROCEDIMIENTOS_V015_ESCRITURA = frozenset({"sp_eliminar_unidad_baja"})
+PROCEDIMIENTOS_V015 = PROCEDIMIENTOS_V015_ESCRITURA
+
 PROCEDIMIENTOS_NUEVOS = (PROCEDIMIENTOS_V009_LECTURA | PROCEDIMIENTOS_V009_ESCRITURA
-                         | PROCEDIMIENTOS_V010 | PROCEDIMIENTOS_V011 | PROCEDIMIENTOS_V012 | PROCEDIMIENTOS_V013)
+                         | PROCEDIMIENTOS_V010 | PROCEDIMIENTOS_V011 | PROCEDIMIENTOS_V012 | PROCEDIMIENTOS_V013
+                         | PROCEDIMIENTOS_V015)
 _ESCRITURA = (PROCEDIMIENTOS_ESCRITURA | PROCEDIMIENTOS_V009_ESCRITURA | PROCEDIMIENTOS_V010_ESCRITURA
-              | PROCEDIMIENTOS_V011_ESCRITURA | PROCEDIMIENTOS_V012_ESCRITURA | PROCEDIMIENTOS_V013_ESCRITURA)
+              | PROCEDIMIENTOS_V011_ESCRITURA | PROCEDIMIENTOS_V012_ESCRITURA | PROCEDIMIENTOS_V013_ESCRITURA
+              | PROCEDIMIENTOS_V015_ESCRITURA)
 PROCEDIMIENTOS_PERMITIDOS = PROCEDIMIENTOS_ORIGINALES | PROCEDIMIENTOS_NUEVOS
 
 # Errores de MySQL que significan "no hay conexión / sin acceso".
@@ -468,6 +475,11 @@ class _ProcedimientosSP:
 
     def baja_unidad(self, id_vehiculo):
         self._llamar("sp_baja_unidad", (id_vehiculo,))
+
+    def eliminar_unidad_baja(self, id_vehiculo):
+        """V015: borra la unidad (ya dada de baja) y todo lo suyo; devuelve qué se borró."""
+        registros = self._llamar("sp_eliminar_unidad_baja", (id_vehiculo,))
+        return registros[0] if registros else {}
 
     # ---------------- Usuarios ----------------
 

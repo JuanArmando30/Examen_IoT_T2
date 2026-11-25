@@ -163,6 +163,20 @@ def baja_unidad(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: Actor
     return contenedor.unidades.baja(actor, id_vehiculo)
 
 
+@router.post("/unidades/{id_vehiculo}/eliminar", summary="Eliminar definitivamente una unidad dada de baja",
+             response_model=MensajeOut, responses=ADMIN_ESCRITURA)
+def eliminar_unidad(id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ActorAdmin):
+    """Solo unidades en estado **baja** (409 si no). Borra para siempre la unidad con
+    su historial, DEMO, asignaciones pasadas, autorizaciones de soporte, reservas de
+    invitado y credencial del ESP32, en una sola transacción. **No se puede deshacer**;
+    la auditoría conserva quién la eliminó y cuánto se borró.
+
+    **SP:** `sp_obtener_unidad`, `sp_eliminar_unidad_baja`, `sp_registrar_auditoria`."""
+    borrado = contenedor.unidades.eliminar_definitiva(actor, id_vehiculo)
+    return {"mensaje": f"Unidad eliminada definitivamente ({int(borrado.get('historial') or 0)} movimientos de "
+                       f"historial borrados).", "id": id_vehiculo}
+
+
 # ----------------------------------------------------------------- Usuarios
 
 @router.get("/usuarios", summary="Clientes y administradores", response_model=Pagina[UsuarioOut],

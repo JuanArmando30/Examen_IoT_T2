@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter
 
 from app.api.dependencies import (
-    Administrador, ContenedorDep, IdVehiculo, LecturaUnidad, Operador,
+    ActorAdmin, ContenedorDep, IdVehiculo, LecturaUnidad, Operador,
 )
 from app.api.documentacion import BORRADO, ESCRITURA, LECTURA, TAG_VEHICULOS
 from app.core.exceptions import ConflictoNegocio
@@ -90,17 +90,25 @@ def actualizar_vehiculo(
     responses=BORRADO,
 )
 def eliminar_vehiculo(
-    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _rol: Administrador,
+    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ActorAdmin,
 ):
-    """Elimina el vehículo y, por cascada, sus comandos, estado, historial
-    y DEMO.
+    """Elimina el vehículo y, por cascada, sus comandos, estado y DEMO.
 
-    **Stored Procedures:** `sp_obtener_vehiculo` y `sp_eliminar_vehiculo`.
+    - Unidad **dada de baja**: se elimina **definitivamente** con su historial,
+      asignaciones pasadas, reservas y credenciales (V015, queda en la auditoría).
+    - Otra unidad con historial: 409 (primero dala de baja en Inventario).
+
+    **Stored Procedures:** `sp_obtener_vehiculo`, `sp_eliminar_vehiculo` o
+    `sp_eliminar_unidad_baja`.
     """
     if contenedor.demo_ejecutor.esta_ejecutando(id_vehiculo):
         raise ConflictoNegocio(
             "El vehículo tiene una DEMO en ejecución. Cancélala primero."
         )
+
+    if contenedor.unidades.esta_de_baja(id_vehiculo):
+        contenedor.unidades.eliminar_definitiva(actor, id_vehiculo)
+        return {"mensaje": "Unidad dada de baja eliminada definitivamente.", "id": id_vehiculo}
 
     contenedor.vehiculos.eliminar(id_vehiculo)
     return {"mensaje": "Vehículo eliminado.", "id": id_vehiculo}

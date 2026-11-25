@@ -34,7 +34,7 @@ def _ahora():
 class RepositorioFalso:
     """Lo mínimo de cada SP para probar rutas y servicios."""
 
-    def __init__(self, con_v009=True, version=14):
+    def __init__(self, con_v009=True, version=15):
         self.con_v009 = con_v009
         self.version = version
         self.llamadas = []
@@ -357,6 +357,16 @@ class RepositorioFalso:
 
     def baja_unidad(self, i):
         self.unidades[i].update(estado_comercial="baja", activo=False)
+
+    def eliminar_unidad_baja(self, i):
+        self._anotar("sp_eliminar_unidad_baja")
+        borrado = {"historial": len(self.historial.pop(i, [])), "demos": 0,
+                   "asignaciones": sum(1 for a in self.asignaciones if a["id_vehiculo"] == i),
+                   "reservas": 0}
+        self.asignaciones = [a for a in self.asignaciones if a["id_vehiculo"] != i]
+        for tabla in (self.unidades, self.vehiculos, self.comandos, self.estados):
+            tabla.pop(i, None)
+        return borrado
 
     def listar_usuarios(self, rol, activo, texto, limite, desp):
         filas = [self.obtener_usuario(i) for i in sorted(self.usuarios)

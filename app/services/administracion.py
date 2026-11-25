@@ -33,7 +33,8 @@ VERSION_DEMOS_PRIVADAS = 11
 VERSION_INVITADOS = 12
 VERSION_DISPOSITIVO = 13
 VERSION_RESERVA_JUSTA = 14                        # V014: sin espera tras una desconexión
-VERSION_MAS_RECIENTE = VERSION_RESERVA_JUSTA      # deja de consultarse al alcanzarla
+VERSION_ELIMINAR_BAJA = 15                        # V015: eliminar definitivamente una unidad dada de baja
+VERSION_MAS_RECIENTE = VERSION_ELIMINAR_BAJA      # deja de consultarse al alcanzarla
 ESTADOS = ("inventario", "vendida", "exhibicion", "baja")
 _PATRON_CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 
@@ -98,6 +99,9 @@ class EsquemaBD:
 
     def tiene_autenticacion(self):
         return self.version() >= VERSION_AUTENTICACION
+
+    def tiene_eliminar_baja(self):
+        return self.version() >= VERSION_ELIMINAR_BAJA
 
     def tiene_dispositivo(self):
         return self.version() >= VERSION_DISPOSITIVO
@@ -301,6 +305,34 @@ class UnidadService:
         self.auditoria.registrar(actor, "unidad.baja", "unidad", id_vehiculo,
                                  {"estado_anterior": unidad["estado_comercial"]})
         return self.obtener_o_fallar(id_vehiculo)
+
+    def esta_de_baja(self, id_vehiculo):
+        """True si existe como unidad de Administración y está dada de baja (sin V009: False)."""
+        if not self.esquema.tiene_administracion():
+            return False
+        unidad = self.repositorio.obtener_unidad(id_vehiculo)
+        return unidad is not None and unidad["estado_comercial"] == "baja"
+
+    def eliminar_definitiva(self, actor, id_vehiculo):
+        """Borra para siempre una unidad DADA DE BAJA con su historial, DEMO, asignaciones
+        pasadas, reservas y credenciales (V015). La baja es el paso previo obligatorio:
+        conserva el historial hasta que la empresa decide eliminarla. La auditoría guarda
+        quién la eliminó y cuánto se borró (no tiene FK a la unidad)."""
+        unidad = self.obtener_o_fallar(id_vehiculo)
+        if unidad["estado_comercial"] != "baja":
+            raise ConflictoNegocio("Solo se elimina definitivamente una unidad dada de baja. "
+                                   "Primero usa «Baja» en Inventario.")
+        if not self.esquema.tiene_eliminar_baja():
+            raise EsquemaPendiente("Eliminar una unidad dada de baja requiere la migración V015 "
+                                   "(python -m app.db.migrar aplicar).")
+        if self.demo_ejecutor.esta_ejecutando(id_vehiculo):
+            raise ConflictoNegocio("La unidad tiene una DEMO en ejecución. Cancélala primero.")
+        borrado = self.repositorio.eliminar_unidad_baja(id_vehiculo)
+        self.auditoria.registrar(actor, "unidad.eliminar", "unidad", id_vehiculo, {
+            "nombre": unidad["nombre"], "numero_serie": unidad.get("numero_serie"),
+            **{k: int(borrado.get(k) or 0) for k in ("historial", "demos", "asignaciones", "reservas")},
+        })
+        return borrado
 
 
 class UsuarioService:

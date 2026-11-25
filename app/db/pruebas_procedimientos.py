@@ -508,6 +508,62 @@ def probar_v014(ex, base):
     _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
 
 
+def probar_v015(ex, base):
+    """Una unidad CON TODO (historial, DEMO con pasos, asignación pasada, soporte, reserva y
+    credencial) solo se elimina dada de baja, y entonces no deja nada suyo en la base."""
+    ex.usar(base)
+    antes = ex.conteos(base)
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 15, "sp_version_esquema debe ser 15 o más")
+    ex.llamar("sp_invitado_cerrar_todas", ("detenida",))
+    h = lambda t: hashlib.sha256(f"v015-{t}".encode()).hexdigest()   # noqa: E731
+    futuro = ex.valor("SELECT UTC_TIMESTAMP() + INTERVAL 1 DAY")
+    u = int(ex.llamar("sp_crear_usuario", ("cliente.v015@prueba.local", "Cliente V015", "usuario"))[0]["id_usuario"])
+    a = int(ex.llamar("sp_crear_usuario", ("admin.v015@prueba.local", "Admin V015", "admin"))[0]["id_usuario"])
+    m = int(ex.llamar("sp_crear_modelo", ("Modelo V015", None, "ESP32", 3000, 5000, 10, 60000))[0]["id_modelo"])
+    ex.llamar("sp_guardar_capacidad", (m, "AVANZAR", 1, None, "movimiento", 1))
+    ex.llamar("sp_guardar_capacidad", (m, "DETENER", 9, None, "paro", 1))
+    v = int(ex.llamar("sp_crear_unidad", (m, "Unidad V015", None, None, "exhibicion", 1))[0]["id_vehiculo"])
+    avanzar = ex.valor("SELECT id_comando FROM comandos WHERE id_vehiculo = %s AND codigo = 1", (v,))
+
+    # Vida completa: reserva de invitado, venta, soporte, DEMO privada con pasos, historial, credencial
+    r = ex.llamar("sp_invitado_reservar", (v, h("token"), h("red"), 1, 10, 3))[0]
+    _afirmar(r["resultado"] == "ok", f"reserva: {r}")
+    ex.llamar("sp_invitado_finalizar", (r["id_reserva"], "cancelada"))
+    a1 = int(ex.llamar("sp_asignar_unidad", (v, u, a))[0]["id_asignacion"])
+    ex.llamar("sp_soporte_otorgar", (v, u, a, "prueba", futuro))
+    d = int(ex.llamar("sp_crear_demo_privada", (v, u, "DEMO V015", None))[0]["id_demo"])
+    ex.llamar("sp_guardar_pasos_demo", (d, json.dumps([{"id_comando": avanzar, "duracion_ms": 1000, "pausa_ms": 0}])))
+    ex.llamar("sp_registrar_historial_autor", (v, avanzar, "PRUEBA_V015", u, None))
+    ex.llamar("sp_actualizar_estado", (v, avanzar, 0))
+    ex.llamar("sp_dispositivo_crear", (v, h("secreto")))
+
+    # Sin baja no se elimina (ni con comprador ni sin él)
+    _debe_fallar(lambda: ex.llamar("sp_eliminar_unidad_baja", (v,)), ERRNO_SIGNAL, "vendida: no se elimina")
+    ex.llamar("sp_finalizar_asignacion", (a1, "prueba", "inventario"))
+    _debe_fallar(lambda: ex.llamar("sp_eliminar_unidad_baja", (v,)), ERRNO_SIGNAL, "en inventario: no se elimina")
+    _debe_fallar(lambda: ex.llamar("sp_eliminar_unidad_baja", (999999,)), ERRNO_SIGNAL, "unidad inexistente")
+    _afirmar(ex.valor("SELECT COUNT(*) FROM historial_comandos WHERE id_vehiculo = %s", (v,)) == 1,
+             "un intento rechazado no borra nada")
+
+    ex.llamar("sp_baja_unidad", (v,))
+    borrado = ex.llamar("sp_eliminar_unidad_baja", (v,))[0]
+    _afirmar((borrado["historial"], borrado["demos"], borrado["asignaciones"], borrado["reservas"]) == (1, 1, 1, 1),
+             f"conteos de lo borrado: {borrado}")
+    for tabla in ("vehiculos", "comandos", "historial_comandos", "estado_vehiculo", "demos", "asignaciones",
+                  "autorizaciones_soporte", "reservas_exhibicion", "credenciales_dispositivo"):
+        _afirmar(ex.valor(f"SELECT COUNT(*) FROM {tabla} WHERE id_vehiculo = %s", (v,)) == 0,
+                 f"quedaron filas de la unidad en {tabla}")
+    _afirmar(ex.valor("SELECT COUNT(*) FROM demo_movimientos WHERE id_demo = %s", (d,)) == 0, "quedaron pasos de la DEMO")
+
+    # ---- Limpieza
+    ex.ejecutar("DELETE FROM sesiones_invitado WHERE red_hash = %s", (h("red"),))
+    ex.ejecutar("DELETE FROM modelo_comandos WHERE id_modelo = %s", (m,))
+    ex.ejecutar("DELETE FROM modelos_vehiculo WHERE id_modelo = %s", (m,))
+    ex.ejecutar("DELETE FROM usuarios WHERE id_usuario IN (%s, %s)", (u, a))
+    despues = ex.conteos(base)
+    _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
+
+
 # versión → función(ejecutor, base_de_la_copia)
 PRUEBAS = {
     "V009": probar_v009,
@@ -516,4 +572,5 @@ PRUEBAS = {
     "V012": probar_v012,
     "V013": probar_v013,
     "V014": probar_v014,
+    "V015": probar_v015,
 }

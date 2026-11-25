@@ -2,7 +2,7 @@
 
 import json
 
-from tests.conftest import ADMIN, OPERADOR, RepositorioFalso
+from tests.conftest import ADMIN, OPERADOR, RepositorioFalso, construir_cliente
 
 
 def _modelo(cliente, **extra):
@@ -210,9 +210,46 @@ def test_las_rutas_previas_siguen_en_swagger(cliente):
     # Etapa 3: 21 /admin · Etapa 4: +1 /admin y 10 de sesión · Etapa 6: +1 /admin, +6 mis DEMO, +1 límites
     invitado = sum(len(v) for k, v in rutas.items() if k.startswith("/invitado"))
     # Etapa 7: +3 /admin (exhibición) y 5 /invitado
-    # Etapa 8: +3 /admin (dispositivo) y POST /ws/ticket · Ajustes: +1 /admin (bloqueo de movimientos)
-    assert nuevas == 30 and sesion == 16 and invitado == 5 and operaciones == 28 + 1 + 30 + 16 + 5 + 1
+    # Etapa 8: +3 /admin (dispositivo) y POST /ws/ticket · Ajustes: +1 bloqueo de movimientos, +1 eliminar baja
+    assert nuevas == 31 and sesion == 16 and invitado == 5 and operaciones == 28 + 1 + 31 + 16 + 5 + 1
 
 
 def test_repositorio_falso_no_v009_por_defecto_es_coherente():
     assert RepositorioFalso(con_v009=False).con_v009 is False
+
+
+def test_unidad_dada_de_baja_se_elimina_definitivamente(repo, cliente):
+    """Antes: dada de baja y con historial ya no se podía borrar nunca. Ahora la baja es el paso previo."""
+    m = _modelo(cliente)
+    u = _unidad(cliente, m["id_modelo"])["id_vehiculo"]
+    repo.historial[u] = [{"id_historial": 900, "id_vehiculo": u, "comando": "AVANZAR", "codigo": 1,
+                          "fecha_hora": None, "origen": "WEB_PULSO"}]
+    # Sin baja: con historial se rechaza (por ambas rutas)
+    r = cliente.post(f"/vehiculos/{u}/eliminar", headers=ADMIN)
+    assert r.status_code == 409 and "baja" in r.json()["detail"]
+    assert cliente.post(f"/admin/unidades/{u}/eliminar", headers=ADMIN).status_code == 409
+    assert cliente.post(f"/admin/unidades/{u}/baja", headers=ADMIN).status_code == 200
+    # Dada de baja: un operador no puede; el administrador sí (pestaña Vehículos)
+    assert cliente.post(f"/vehiculos/{u}/eliminar", headers=OPERADOR).status_code == 403
+    r = cliente.post(f"/vehiculos/{u}/eliminar", headers=ADMIN)
+    assert r.status_code == 200, r.text
+    assert "sp_eliminar_unidad_baja" in repo.llamadas and "sp_eliminar_vehiculo" not in repo.llamadas
+    assert u not in repo.unidades and u not in repo.vehiculos and u not in repo.historial
+    assert cliente.get(f"/admin/unidades/{u}", headers=ADMIN).status_code == 404
+    assert cliente.post(f"/admin/unidades/{u}/eliminar", headers=ADMIN).status_code == 404
+    aud = [a for a in repo.auditoria if a["accion"] == "unidad.eliminar"]
+    assert len(aud) == 1 and '"historial": 1' in aud[0]["detalle"]
+
+
+def test_eliminar_baja_desde_inventario_y_sin_v015():
+    """Inventario usa /admin/unidades/{id}/eliminar. Sin V015 responde 503 claro y no borra nada."""
+    for version, esperado in ((14, 503), (15, 200)):
+        repo = RepositorioFalso(version=version)
+        with construir_cliente(repo) as cliente:
+            u = _unidad(cliente, _modelo(cliente)["id_modelo"])["id_vehiculo"]
+            assert cliente.post(f"/admin/unidades/{u}/baja", headers=ADMIN).status_code == 200
+            r = cliente.post(f"/admin/unidades/{u}/eliminar", headers=ADMIN)
+            assert r.status_code == esperado, r.text
+            assert (u in repo.unidades) == (esperado == 503)
+            if esperado == 503:
+                assert "V015" in r.json()["detail"]
