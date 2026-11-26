@@ -35,7 +35,8 @@ VERSION_DISPOSITIVO = 13
 VERSION_RESERVA_JUSTA = 14                        # V014: sin espera tras una desconexión
 VERSION_ELIMINAR_BAJA = 15                        # V015: eliminar definitivamente una unidad dada de baja
 VERSION_ACCESORIOS_INVITADO = 16                  # V016: luz, sonido y encendido también para invitados
-VERSION_MAS_RECIENTE = VERSION_ACCESORIOS_INVITADO  # deja de consultarse al alcanzarla
+VERSION_ESPERA_SEGUNDOS = 17                      # V017: espera del invitado en segundos
+VERSION_MAS_RECIENTE = VERSION_ESPERA_SEGUNDOS    # deja de consultarse al alcanzarla
 ESTADOS = ("inventario", "vendida", "exhibicion", "baja")
 _PATRON_CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 
@@ -100,6 +101,9 @@ class EsquemaBD:
 
     def tiene_autenticacion(self):
         return self.version() >= VERSION_AUTENTICACION
+
+    def tiene_espera_en_segundos(self):
+        return self.version() >= VERSION_ESPERA_SEGUNDOS
 
     def tiene_eliminar_baja(self):
         return self.version() >= VERSION_ELIMINAR_BAJA

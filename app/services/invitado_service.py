@@ -4,7 +4,7 @@ Reglas:
 - Interruptor de exhibición (lo abre la empresa cuando hay alguien supervisando).
   Vive en memoria y caduca solo: si la API se reinicia queda CERRADO (estado seguro).
 - Reserva EXCLUSIVA de 5 min, una a la vez, sin fila. Límites por red (hash de la
-  IP con TOKEN_SECRETO) contados en RDS: 3 por hora y 10 min entre reservas.
+  IP con TOKEN_SECRETO) contados en RDS: 5 por hora y 15 s entre reservas (V017).
 - Mientras dura, nadie más controla esa unidad (ni clave, ni control abierto, ni
   otra sesión), salvo DETENER/cancelar, que siempre tienen prioridad.
 - El invitado solo usa comandos que el modelo permite a invitados (DETENER y
@@ -32,9 +32,10 @@ from app.websocket import eventos
 
 logger = logging.getLogger(__name__)
 
-MINUTOS_RESERVA = 1                 # prueba corta: 1 minuto
+MINUTOS_RESERVA = 2                 # prueba corta: 2 minutos
 MAX_RESERVAS_POR_HORA = 5
-ENFRIAMIENTO_MIN = 3                # espera tras usarla o terminarla (no tras una desconexión, V014)
+ENFRIAMIENTO_S = 15                 # espera tras usarla o terminarla (no tras una desconexión, V014)
+ENFRIAMIENTO_SIN_V017_MIN = 1       # antes de V017 el SP solo acepta minutos enteros
 LATIDO_MAX_S = 15            # sin latido durante este tiempo → «desconexión»
 VIGILANCIA_S = 1
 MAX_HORAS_EXHIBICION = 8
@@ -156,9 +157,11 @@ class InvitadoService:
         token = tokens.secreto_aleatorio()
         huella = tokens.huella(self.auth, token)
         red = tokens.huella(self.auth, f"red:{ip}")
+        # V017: el último parámetro es en segundos; antes, en minutos (enviar 15 serían 15 min).
+        espera = ENFRIAMIENTO_S if self.esquema.tiene_espera_en_segundos() else ENFRIAMIENTO_SIN_V017_MIN
         async with self._candado:
             r = await asyncio.to_thread(self.repositorio.invitado_reservar, id_vehiculo, huella, red,
-                                        MINUTOS_RESERVA, MAX_RESERVAS_POR_HORA, ENFRIAMIENTO_MIN)
+                                        MINUTOS_RESERVA, MAX_RESERVAS_POR_HORA, espera)
             resultado = r.get("resultado")
             if resultado == "propia":
                 raise ConflictoNegocio(

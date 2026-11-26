@@ -34,7 +34,7 @@ def _ahora():
 class RepositorioFalso:
     """Lo mínimo de cada SP para probar rutas y servicios."""
 
-    def __init__(self, con_v009=True, version=15):
+    def __init__(self, con_v009=True, version=17):
         self.con_v009 = con_v009
         self.version = version
         self.llamadas = []
@@ -164,7 +164,10 @@ class RepositorioFalso:
                  "microcontrolador": u["microcontrolador"], "conectado": None}
                 for i, u in self.unidades.items() if u["estado_comercial"] == "exhibicion" and u["activo"]]
 
-    def invitado_reservar(self, id_vehiculo, huella, red, minutos, por_hora, enfriamiento_min):
+    def invitado_reservar(self, id_vehiculo, huella, red, minutos, por_hora, enfriamiento):
+        self.ultima_espera = enfriamiento                    # para comprobar qué envía la API
+        # V017: la espera llega en SEGUNDOS; antes, en minutos (igual que el SP real)
+        espera = timedelta(seconds=enfriamiento) if self.version >= 17 else timedelta(minutes=enfriamiento)
         ahora = _ahora()
         for r in self.reservas:                                   # las vencidas se cierran solas
             if r["fin"] is None and r["expira"] <= ahora:
@@ -182,8 +185,8 @@ class RepositorioFalso:
         # V014: la espera solo cuenta las reservas que el visitante usó o cerró
         ultima = max((r["fin"] or r["expira"] for r in mias
                       if r["motivo"] in (None, "expirada", "cancelada")), default=None)
-        if ultima and ultima + timedelta(minutes=enfriamiento_min) > ahora:
-            return {"resultado": "enfriamiento", "segundos": int((ultima + timedelta(minutes=enfriamiento_min) - ahora).total_seconds())}
+        if ultima and ultima + espera > ahora:
+            return {"resultado": "enfriamiento", "segundos": int((ultima + espera - ahora).total_seconds())}
         i = len(self.reservas) + 1
         self.reservas.append({"id_reserva": i, "id_sesion": 100 + i, "id_vehiculo": id_vehiculo, "huella": huella,
                               "red": red, "inicio": ahora, "expira": ahora + timedelta(minutes=minutos),

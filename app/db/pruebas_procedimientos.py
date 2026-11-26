@@ -25,6 +25,11 @@ def _afirmar(condicion, mensaje):
         raise FallaPrueba(mensaje)
 
 
+def _espera(ex, minutos):
+    """Último parámetro de sp_invitado_reservar: minutos hasta V016, SEGUNDOS desde V017."""
+    return minutos * 60 if ex.llamar("sp_version_esquema")[0]["version"] >= 17 else minutos
+
+
 def _debe_fallar(funcion, errno, descripcion):
     try:
         funcion()
@@ -371,7 +376,7 @@ def probar_v012(ex, base):
     _afirmar(catalogo[ve]["reservada_hasta"] is None and catalogo[ve]["modelo"] == "Modelo V012", f"catálogo: {catalogo[ve]}")
 
     def reservar(v, token, red, minutos=5, por_hora=3, enfriamiento=10):
-        return ex.llamar("sp_invitado_reservar", (v, h(token), red, minutos, por_hora, enfriamiento))[0]
+        return ex.llamar("sp_invitado_reservar", (v, h(token), red, minutos, por_hora, _espera(ex, enfriamiento)))[0]
 
     # ---- Solo unidades en exhibición (nunca la de un comprador ni una en inventario)
     _afirmar(reservar(vi, "t0", redes[0])["resultado"] == "no_disponible", "unidad en inventario")
@@ -479,7 +484,7 @@ def probar_v014(ex, base):
     n = iter(range(100))
 
     def reservar(red, por_hora=10):
-        return ex.llamar("sp_invitado_reservar", (ve, h(f"t{next(n)}"), red, 5, por_hora, 10))[0]
+        return ex.llamar("sp_invitado_reservar", (ve, h(f"t{next(n)}"), red, 5, por_hora, _espera(ex, 10)))[0]
 
     r = reservar(red_a)
     _afirmar(r["resultado"] == "ok", f"primera reserva: {r}")
@@ -526,7 +531,7 @@ def probar_v015(ex, base):
     avanzar = ex.valor("SELECT id_comando FROM comandos WHERE id_vehiculo = %s AND codigo = 1", (v,))
 
     # Vida completa: reserva de invitado, venta, soporte, DEMO privada con pasos, historial, credencial
-    r = ex.llamar("sp_invitado_reservar", (v, h("token"), h("red"), 1, 10, 3))[0]
+    r = ex.llamar("sp_invitado_reservar", (v, h("token"), h("red"), 1, 10, _espera(ex, 3)))[0]
     _afirmar(r["resultado"] == "ok", f"reserva: {r}")
     ex.llamar("sp_invitado_finalizar", (r["id_reserva"], "cancelada"))
     a1 = int(ex.llamar("sp_asignar_unidad", (v, u, a))[0]["id_asignacion"])
@@ -564,6 +569,37 @@ def probar_v015(ex, base):
     _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
 
 
+def probar_v017(ex, base):
+    """La espera entre reservas se mide en SEGUNDOS (15 s en la API)."""
+    ex.usar(base)
+    antes = ex.conteos(base)
+    _afirmar(ex.llamar("sp_version_esquema")[0]["version"] >= 17, "sp_version_esquema debe ser 17 o más")
+    ex.llamar("sp_invitado_cerrar_todas", ("detenida",))
+    m = int(ex.llamar("sp_crear_modelo", ("Modelo V017", None, "ESP32", 3000, 5000, 10, 60000))[0]["id_modelo"])
+    ve = int(ex.llamar("sp_crear_unidad", (m, "Exhibición V017", None, None, "exhibicion", 1))[0]["id_vehiculo"])
+    h = lambda t: hashlib.sha256(f"v017-{t}".encode()).hexdigest()   # noqa: E731
+    red = h("red")
+    n = iter(range(100))
+
+    def reservar(espera_s):
+        return ex.llamar("sp_invitado_reservar", (ve, h(f"t{next(n)}"), red, 2, 10, espera_s))[0]
+
+    r = reservar(15)
+    _afirmar(r["resultado"] == "ok" and 110 < r["segundos"] <= 120, f"reserva de 2 minutos: {r}")
+    ex.llamar("sp_invitado_finalizar", (r["id_reserva"], "cancelada"))
+    e = reservar(15)
+    _afirmar(e["resultado"] == "enfriamiento" and 1 <= e["segundos"] <= 15, f"espera de 15 s (no 15 min): {e}")
+    _afirmar(reservar(0)["resultado"] == "ok", "con espera 0 se reserva enseguida")
+
+    ex.ejecutar("DELETE r FROM reservas_exhibicion r JOIN sesiones_invitado s ON s.id_sesion = r.id_sesion "
+                "WHERE s.red_hash = %s", (red,))
+    ex.ejecutar("DELETE FROM sesiones_invitado WHERE red_hash = %s", (red,))
+    ex.llamar("sp_eliminar_vehiculo", (ve,))
+    ex.ejecutar("DELETE FROM modelos_vehiculo WHERE id_modelo = %s", (m,))
+    despues = ex.conteos(base)
+    _afirmar(antes == despues, f"la prueba dejó registros en las tablas originales: {antes} → {despues}")
+
+
 # versión → función(ejecutor, base_de_la_copia)
 PRUEBAS = {
     "V009": probar_v009,
@@ -573,4 +609,5 @@ PRUEBAS = {
     "V013": probar_v013,
     "V014": probar_v014,
     "V015": probar_v015,
+    "V017": probar_v017,
 }

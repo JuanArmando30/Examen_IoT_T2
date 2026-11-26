@@ -3,7 +3,7 @@
 import time
 from datetime import timedelta
 
-from tests.conftest import OPERADOR
+from tests.conftest import OPERADOR, RepositorioFalso, construir_cliente
 from tests.test_autenticacion import _bearer, _usuario
 
 
@@ -68,7 +68,7 @@ def test_reserva_exclusiva_y_comandos_permitidos(repo, cliente):
     datos = r.json()
     token = datos["token_invitado"]
     assert token not in str(repo.reservas)                             # en la base solo su huella
-    assert {c["codigo"] for c in datos["comandos"]} == {1, 9, 10} and 50 < datos["segundos_restantes"] <= 60   # 1 minuto
+    assert {c["codigo"] for c in datos["comandos"]} == {1, 9, 10} and 110 < datos["segundos_restantes"] <= 120  # 2 minutos
     assert next(c for c in datos["comandos"] if c["codigo"] == 10)["tipo"] == "accesorio"
     assert cliente.get("/invitado/catalogo").json()[0]["disponible"] is False
     assert _reservar(cliente, ve).status_code == 409                   # ocupada (sin fila)
@@ -106,7 +106,8 @@ def test_terminar_detiene_y_aplica_enfriamiento(repo, cliente):
     assert _mover(cliente, ve, 1, _inv(token)).status_code == 401      # el token ya no sirve
     assert _mover(cliente, ve, 1, OPERADOR).status_code == 201         # la unidad quedó libre
     r = _reservar(cliente, ve)                                          # misma red, enseguida
-    assert r.status_code == 429 and "de nuevo" in r.json()["detail"]
+    assert r.status_code == 429 and "de nuevo en 0:1" in r.json()["detail"]   # espera de 15 s (0:1x)
+    assert repo.ultima_espera == 15
     assert {"invitado.reservar", "invitado.fin"} <= {a["accion"] for a in repo.auditoria}
 
 
@@ -157,6 +158,19 @@ def test_la_empresa_cierra_o_termina_la_reserva(repo, cliente):
     r = cliente.post(f"/admin/unidades/{ve}/exhibicion", json={"abierta": False}, headers=admin)
     assert r.status_code == 200 and r.json()["abierta"] is False
     assert {"exhibicion.abrir", "exhibicion.cerrar", "invitado.terminar"} <= {a["accion"] for a in repo.auditoria}
+
+
+def test_espera_de_15_s_solo_con_v017():
+    """Sin V017 el SP mide la espera en minutos: la API manda 1 (no 15, que serían 15 minutos)."""
+    for version, esperado in ((16, 1), (17, 15)):
+        repo = RepositorioFalso(version=version)
+        with construir_cliente(repo) as cliente:
+            ve, _, admin, _ = _escenario(repo, cliente)
+            _abrir(cliente, ve, admin)
+            token = _reservar(cliente, ve).json()["token_invitado"]
+            cliente.post("/invitado/terminar", headers=_inv(token))
+            assert _reservar(cliente, ve).status_code == 429
+            assert repo.ultima_espera == esperado
 
 
 def test_sin_v012_el_catalogo_da_503(repo, cliente):

@@ -349,7 +349,7 @@ def test_secreto_corto_o_igual_a_una_clave_se_rechaza(monkeypatch):
 
 
 def test_repositorio_falso_v010():
-    assert RepositorioFalso().version == 15
+    assert RepositorioFalso().version == 17
 
 
 # ------------------------------------------------------------------ Etapa 5: catálogo técnico con sesión
