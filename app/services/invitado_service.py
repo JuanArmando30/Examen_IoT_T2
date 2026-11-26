@@ -60,6 +60,9 @@ class Reserva:
     expira: datetime
     comandos: dict                                   # id_comando -> {nombre, codigo, tipo}
     ultimo_latido: float = field(default_factory=time.monotonic)
+    inicio: float = field(default_factory=time.monotonic)
+    movimientos: int = 0                             # órdenes enviadas (para el resumen de la bitácora)
+    demos: int = 0
 
     def segundos(self):
         return max(int((self.expira - _ahora()).total_seconds()), 0)
@@ -267,6 +270,22 @@ class InvitadoService:
         if demo["duracion_total_ms"] > r.segundos() * 1000:
             raise ConflictoNegocio("No queda tiempo de reserva suficiente para esa DEMO.")
 
+    # ------------------------------------------------------------ bitácora
+
+    async def auditar_accion(self, actor, id_vehiculo, accion, detalle):
+        """Deja en la BITÁCORA cada acción del invitado (movimiento, DEMO iniciada o cancelada),
+        con su número de reserva, para ver todo lo que hizo. Mejor esfuerzo: nunca frena el mando."""
+        if actor is None or actor.rol != "invitado":
+            return
+        r = self.reserva_de(id_vehiculo)
+        if r is not None and r.id_sesion == actor.id_sesion:
+            if accion == "invitado.movimiento":
+                r.movimientos += 1
+            elif accion == "invitado.demo":
+                r.demos += 1
+        datos = {"id_reserva": r.id_reserva if r is not None else None, **detalle}
+        await asyncio.to_thread(self.auditoria.registrar, actor, accion, "unidad", id_vehiculo, datos)
+
     # ------------------------------------------------------------ fin seguro
 
     async def finalizar(self, id_vehiculo, motivo):
@@ -295,7 +314,8 @@ class InvitadoService:
         except Exception:
             logger.exception("No se pudo cerrar la reserva %s en RDS", r.id_reserva)
         await asyncio.to_thread(self.auditoria.registrar, self._sistema(), "invitado.fin", "unidad", id_vehiculo,
-                                {"id_reserva": r.id_reserva, "motivo": motivo})
+                                {"id_reserva": r.id_reserva, "motivo": motivo, "movimientos": r.movimientos,
+                                 "demos": r.demos, "duracion_s": int(time.monotonic() - r.inicio)})
         return True
 
     async def _vigilar(self):

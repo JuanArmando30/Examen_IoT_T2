@@ -71,7 +71,7 @@ def estado_ejecucion(id_vehiculo: IdVehiculo, contenedor: ContenedorDep,
     response_model=DemoCanceladaOut, responses=ESCRITURA,
 )
 async def cancelar_demo(
-    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, _actor: ControlUnidad,
+    id_vehiculo: IdVehiculo, contenedor: ContenedorDep, actor: ControlUnidad,
 ):
     """Suspende **inmediatamente** la emisión de movimientos posteriores,
     deja el estado en `DETENER` (si el vehículo tiene ese comando) y
@@ -80,7 +80,10 @@ async def cancelar_demo(
     **Stored Procedures:** `sp_obtener_comandos_vehiculo` y
     `sp_actualizar_estado` (no usa `sp_registrar_historial`).
     """
-    return await contenedor.demo_ejecutor.cancelar(id_vehiculo)
+    resultado = await contenedor.demo_ejecutor.cancelar(id_vehiculo)
+    await contenedor.invitados.auditar_accion(actor, id_vehiculo, "invitado.demo_cancelar", {
+        "id_demo": resultado.get("id_demo"), "movimientos_emitidos": resultado.get("movimientos_emitidos")})
+    return resultado
 
 
 @router.post(
@@ -148,7 +151,10 @@ async def iniciar_demo(
     contenedor.invitados.exigir_control(id_vehiculo, actor)
     if actor.rol == "invitado":
         await asyncio.to_thread(contenedor.invitados.exigir_demo, id_vehiculo, id_demo)
-    return await contenedor.demo_ejecutor.iniciar(id_vehiculo, id_demo, actor)
+    resultado = await contenedor.demo_ejecutor.iniciar(id_vehiculo, id_demo, actor)
+    await contenedor.invitados.auditar_accion(actor, id_vehiculo, "invitado.demo", {
+        "id_demo": id_demo, "nombre": resultado.get("nombre"), "pasos": resultado.get("total_movimientos")})
+    return resultado
 
 
 # ====================== MOVIMIENTOS DE DEMO ======================

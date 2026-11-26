@@ -194,3 +194,34 @@ def test_reserva_propia_y_sin_espera_tras_desconexion(repo, cliente):
     assert repo.reservas[-1]["motivo"] == "desconexion"
     assert _reservar(cliente, ve).status_code == 201                    # sin los 10 min de espera
 
+
+
+def test_bitacora_registra_todo_lo_que_hace_el_invitado(repo, cliente):
+    ve, uv, admin, comprador = _escenario(repo, cliente)
+    demo = repo.crear_demo(ve, "Apta", None)
+    repo.guardar_pasos_demo(demo, f'[{{"id_comando": {100 + 1}, "duracion_ms": 300, "pausa_ms": 0}}]')
+    _abrir(cliente, ve, admin)
+    datos = _reservar(cliente, ve).json()
+    h, id_reserva = _inv(datos["token_invitado"]), datos["id_reserva"]
+    for codigo, origen in ((1, "WEB_JOYSTICK"), (10, "WEB_BOTON"), (9, "WEB_PULSO")):
+        assert cliente.post(f"/vehiculos/{ve}/movimientos", json={"codigo": codigo, "origen": origen},
+                            headers=h).status_code == 201
+    assert _mover(cliente, ve, 5, h).status_code == 403                 # rechazado: no se registra como hecho
+    assert cliente.post(f"/vehiculos/{ve}/demos/{demo}/iniciar", headers=h).status_code == 202
+    assert cliente.post(f"/vehiculos/{ve}/demos/cancelar", headers=h).status_code == 200
+    assert cliente.post("/invitado/terminar", headers=_inv(datos["token_invitado"])).status_code == 204
+    _mover(cliente, uv, 1, comprador)                                   # lo del comprador no entra como invitado
+
+    filas = cliente.get("/admin/auditoria?accion=invitado.&limite=50", headers=admin).json()["elementos"]
+    filas = list(reversed(filas))                                       # en orden de ocurrencia
+    acciones = [f["accion"] for f in filas]
+    assert acciones == ["invitado.reservar", "invitado.movimiento", "invitado.movimiento", "invitado.movimiento",
+                        "invitado.demo", "invitado.demo_cancelar", "invitado.fin"], acciones
+    movs = [f["detalle"] for f in filas if f["accion"] == "invitado.movimiento"]
+    assert [(m["comando"], m["origen"]) for m in movs] == [("AVANZAR", "WEB_JOYSTICK"), ("LUZ", "WEB_BOTON"),
+                                                            ("DETENER", "WEB_PULSO")]
+    assert all(m["id_reserva"] == id_reserva for m in movs)
+    assert all(f["rol_actor"] == "invitado" for f in filas if f["accion"] != "invitado.fin")
+    assert filas[4]["detalle"]["nombre"] == "Apta"
+    fin = filas[-1]["detalle"]
+    assert fin["motivo"] == "cancelada" and fin["movimientos"] == 3 and fin["demos"] == 1 and fin["id_reserva"] == id_reserva

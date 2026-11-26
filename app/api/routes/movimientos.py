@@ -73,4 +73,7 @@ async def registrar_movimiento(
         id_vehiculo, eventos.movimiento_individual(resultado)
     )
     resultado["clientes_notificados"] = notificados
+    # Invitado: cada orden queda también en la bitácora (qué hizo durante su reserva).
+    await contenedor.invitados.auditar_accion(actor, id_vehiculo, "invitado.movimiento", {
+        "comando": resultado["comando"], "codigo": resultado["codigo"], "origen": resultado["origen"]})
     return resultado
