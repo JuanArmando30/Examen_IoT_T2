@@ -34,7 +34,8 @@ VERSION_INVITADOS = 12
 VERSION_DISPOSITIVO = 13
 VERSION_RESERVA_JUSTA = 14                        # V014: sin espera tras una desconexión
 VERSION_ELIMINAR_BAJA = 15                        # V015: eliminar definitivamente una unidad dada de baja
-VERSION_MAS_RECIENTE = VERSION_ELIMINAR_BAJA      # deja de consultarse al alcanzarla
+VERSION_ACCESORIOS_INVITADO = 16                  # V016: luz, sonido y encendido también para invitados
+VERSION_MAS_RECIENTE = VERSION_ACCESORIOS_INVITADO  # deja de consultarse al alcanzarla
 ESTADOS = ("inventario", "vendida", "exhibicion", "baja")
 _PATRON_CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 
@@ -226,7 +227,8 @@ class ModeloService:
         for c in actuales:
             if c["nombre"].upper() == nombre and c["codigo"] != datos.codigo:
                 raise ConflictoNegocio(f"El nombre {nombre} ya lo usa el código {c['codigo']}.")
-        permitido = True if datos.tipo == "paro" else datos.permitido_invitado   # DETENER siempre disponible
+        # DETENER y los accesorios (luz, sonido, encendido: no mueven la unidad) siempre para invitados
+        permitido = True if datos.tipo in ("paro", "accesorio") else datos.permitido_invitado
         self.repositorio.guardar_capacidad(id_modelo, nombre, datos.codigo, datos.descripcion,
                                            datos.tipo, permitido)
         self.auditoria.registrar(actor, "capacidad.guardar", "modelo", id_modelo,

@@ -7,8 +7,9 @@ Reglas:
   IP con TOKEN_SECRETO) contados en RDS: 3 por hora y 10 min entre reservas.
 - Mientras dura, nadie más controla esa unidad (ni clave, ni control abierto, ni
   otra sesión), salvo DETENER/cancelar, que siempre tienen prioridad.
-- El invitado solo usa comandos que el modelo permite a invitados (DETENER
-  siempre) y DEMO de fábrica cuyos pasos sean todos permitidos.
+- El invitado solo usa comandos que el modelo permite a invitados (DETENER y
+  los accesorios —luz, sonido, encender/apagar— siempre) y DEMO de fábrica
+  cuyos pasos sean todos permitidos.
 - Vigilante (cada segundo): al CADUCAR o si el invitado deja de dar señales
   (latido) la API cancela la DEMO, envía DETENER y libera la unidad.
 - Nunca sobre unidades de compradores: el SP solo reserva unidades en 'exhibicion'.
@@ -102,7 +103,22 @@ class InvitadoService:
         """La empresa bloqueó/desbloqueó un movimiento: la reserva en curso lo refleja ya."""
         r = self.reserva_de(id_vehiculo)
         if r is not None:
-            r.comandos = {c["id_comando"]: c for c in self.repositorio.comandos_invitado(id_vehiculo)}
+            r.comandos = self._comandos_de_invitado(id_vehiculo)
+
+    def _comandos_de_invitado(self, id_vehiculo):
+        """Comandos de la reserva: los que el modelo permite a invitados (y DETENER, sp_comandos_invitado)
+        MÁS los accesorios activos (luz, sonido, encender/apagar), igual que en las cuentas de
+        administrador y cliente: no mueven la unidad. Un movimiento bloqueado (inactivo) no entra."""
+        comandos = {c["id_comando"]: c for c in self.repositorio.comandos_invitado(id_vehiculo)}
+        unidad = self.repositorio.obtener_unidad(id_vehiculo)
+        if unidad and unidad.get("id_modelo"):
+            accesorios = {c["codigo"] for c in self.repositorio.listar_capacidades(unidad["id_modelo"])
+                          if c.get("tipo") == "accesorio"}
+            for c in self.repositorio.obtener_comandos_vehiculo(id_vehiculo):
+                if c["activo"] and c["codigo"] in accesorios and c["id_comando"] not in comandos:
+                    comandos[c["id_comando"]] = {"id_comando": c["id_comando"], "nombre": c["nombre"],
+                                                 "codigo": c["codigo"], "tipo": "accesorio"}
+        return comandos
 
     def _por_token(self, token):
         if not token or not self.auth.configurado:
@@ -155,11 +171,11 @@ class InvitadoService:
                     f"Ya usaste la unidad hace poco. Podrás reservarla de nuevo en {_mmss(r.get('segundos') or 0)}.")
             if resultado != "ok":
                 raise ConflictoNegocio("Esta unidad no está disponible para invitados.")
-            comandos = await asyncio.to_thread(self.repositorio.comandos_invitado, id_vehiculo)
+            comandos = await asyncio.to_thread(self._comandos_de_invitado, id_vehiculo)
             reserva = Reserva(
                 id_reserva=int(r["id_reserva"]), id_sesion=int(r["id_sesion"]), id_vehiculo=id_vehiculo,
                 huella=huella, expira=_ahora() + timedelta(seconds=int(r["segundos"])),
-                comandos={c["id_comando"]: c for c in comandos},
+                comandos=comandos,
             )
             self._activas[id_vehiculo] = reserva
         await asyncio.to_thread(self.auditoria.registrar, Actor(None, "invitado", "invitado", reserva.id_sesion),

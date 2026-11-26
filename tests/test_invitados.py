@@ -11,7 +11,8 @@ def _escenario(repo, cliente):
     """Unidad de EXHIBICIÓN `ve` y unidad VENDIDA `uv` a un comprador; mismo modelo."""
     m = repo.crear_modelo("Modelo E7", None, "ESP32", 3000, 5000, 10, 60000)
     repo.guardar_capacidad(m, "AVANZAR", 1, None, "movimiento", True)
-    repo.guardar_capacidad(m, "LUZ", 10, None, "accesorio", False)
+    repo.guardar_capacidad(m, "LUZ", 10, None, "accesorio", False)      # accesorio: igual va al invitado
+    repo.guardar_capacidad(m, "GIRAR", 5, None, "movimiento", False)    # movimiento no permitido a invitados
     repo.guardar_capacidad(m, "DETENER", 9, None, "paro", True)
     ve = repo.crear_unidad(m, "Exhibición", None, None, "exhibicion", False)
     uv = repo.crear_unidad(m, "Vendida", None, None, "inventario", False)
@@ -67,13 +68,15 @@ def test_reserva_exclusiva_y_comandos_permitidos(repo, cliente):
     datos = r.json()
     token = datos["token_invitado"]
     assert token not in str(repo.reservas)                             # en la base solo su huella
-    assert {c["codigo"] for c in datos["comandos"]} == {1, 9} and 50 < datos["segundos_restantes"] <= 60    # 1 minuto
+    assert {c["codigo"] for c in datos["comandos"]} == {1, 9, 10} and 50 < datos["segundos_restantes"] <= 60   # 1 minuto
+    assert next(c for c in datos["comandos"] if c["codigo"] == 10)["tipo"] == "accesorio"
     assert cliente.get("/invitado/catalogo").json()[0]["disponible"] is False
     assert _reservar(cliente, ve).status_code == 409                   # ocupada (sin fila)
 
     assert _mover(cliente, ve, 1, _inv(token)).status_code == 201      # AVANZAR permitido
     assert repo.historial_autor[-1][2] is None                         # sin usuario: el autor es la sesión
-    assert _mover(cliente, ve, 10, _inv(token)).status_code == 403     # LUZ no permitida a invitados
+    assert _mover(cliente, ve, 5, _inv(token)).status_code == 403      # GIRAR no permitido a invitados
+    assert _mover(cliente, ve, 10, _inv(token)).status_code == 201     # LUZ (accesorio) sí, como admin y cliente
     assert _mover(cliente, ve, 9, _inv(token)).status_code == 201      # DETENER siempre
     # Exclusividad: nadie más mueve la unidad durante la reserva… salvo DETENER
     assert _mover(cliente, ve, 1, OPERADOR).status_code == 409
@@ -130,11 +133,13 @@ def test_demos_para_invitados(repo, cliente):
     repo.guardar_pasos_demo(ok, f'[{{"id_comando": {100 + 1}, "duracion_ms": 300, "pausa_ms": 0}}]')
     con_luz = repo.crear_demo(ve, "Con luz", None)
     repo.guardar_pasos_demo(con_luz, f'[{{"id_comando": {100 + 10}, "duracion_ms": 300, "pausa_ms": 0}}]')
+    con_giro = repo.crear_demo(ve, "Con giro", None)
+    repo.guardar_pasos_demo(con_giro, f'[{{"id_comando": {100 + 5}, "duracion_ms": 300, "pausa_ms": 0}}]')
     _abrir(cliente, ve, admin)
     datos = _reservar(cliente, ve).json()
-    assert [d["nombre"] for d in datos["demos"]] == ["Apta"]           # la que usa LUZ no se ofrece
+    assert [d["nombre"] for d in datos["demos"]] == ["Apta", "Con luz"]  # la que usa GIRAR no se ofrece
     h = _inv(datos["token_invitado"])
-    assert cliente.post(f"/vehiculos/{ve}/demos/{con_luz}/iniciar", headers=h).status_code == 403
+    assert cliente.post(f"/vehiculos/{ve}/demos/{con_giro}/iniciar", headers=h).status_code == 403
     assert cliente.post(f"/vehiculos/{ve}/demos/{ok}/iniciar", headers=OPERADOR).status_code == 409
     assert cliente.post(f"/vehiculos/{ve}/demos/{ok}/iniciar", headers=h).status_code == 202
     time.sleep(0.5)

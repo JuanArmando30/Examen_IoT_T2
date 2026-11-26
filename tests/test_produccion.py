@@ -36,6 +36,7 @@ def _mundo(repo, c):
     m = repo.crear_modelo("Modelo P", None, "ESP32", 3000, 5000, 10, 60000)
     repo.guardar_capacidad(m, "AVANZAR", 1, None, "movimiento", True)
     repo.guardar_capacidad(m, "LUZ", 10, None, "accesorio", False)
+    repo.guardar_capacidad(m, "GIRAR", 5, None, "movimiento", False)
     repo.guardar_capacidad(m, "DETENER", 9, None, "paro", True)
     a, b = _usuario(repo, "a@ejemplo.com"), _usuario(repo, "b@ejemplo.com")
     _usuario(repo, "jefa@empresa.com", rol="admin")
@@ -140,7 +141,8 @@ def test_invitado_solo_opera_la_demo_temporal(repo, prod):
     prod.post(f"/admin/unidades/{w['ve']}/exhibicion", json={"abierta": True, "horas": 1}, headers=w["ADM"])
     inv = {"X-Invitado": prod.post("/invitado/reservar", json={"id_vehiculo": w["ve"]}).json()["token_invitado"]}
     assert _mover(prod, w["ve"], 1, inv).status_code == 201
-    assert _mover(prod, w["ve"], 10, inv).status_code == 403                     # comando no permitido
+    assert _mover(prod, w["ve"], 5, inv).status_code == 403                      # movimiento no permitido
+    assert _mover(prod, w["ve"], 10, inv).status_code == 201                     # accesorio (LUZ) sí
     assert _mover(prod, w["ua"], 1, inv).status_code == 403                      # nunca la de un comprador
     assert prod.get("/admin/metricas", headers=inv).status_code == 401           # nada privado
     assert prod.get("/mis-vehiculos", headers=inv).status_code == 401

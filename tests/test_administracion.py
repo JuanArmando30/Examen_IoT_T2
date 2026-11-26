@@ -64,6 +64,9 @@ def test_capacidades_paro_siempre_para_invitado_y_no_se_borra(cliente):
     r = cliente.post(f"/admin/modelos/{m['id_modelo']}/capacidades",
                      json={"nombre": "detener", "codigo": 9, "tipo": "paro", "permitido_invitado": False}, headers=ADMIN)
     assert r.status_code == 200 and r.json()["permitido_invitado"] is True and r.json()["nombre"] == "DETENER"
+    r = cliente.post(f"/admin/modelos/{m['id_modelo']}/capacidades",          # accesorio: también siempre
+                     json={"nombre": "LUZ", "codigo": 10, "tipo": "accesorio", "permitido_invitado": False}, headers=ADMIN)
+    assert r.status_code == 200 and r.json()["permitido_invitado"] is True
     r = cliente.post(f"/admin/modelos/{m['id_modelo']}/capacidades",
                      json={"nombre": "DETENER", "codigo": 99}, headers=ADMIN)
     assert r.status_code == 409                                   # mismo nombre con otro código
